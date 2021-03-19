@@ -1,7 +1,10 @@
 import random
 from faker import Faker
+import sys
 
+sys.path.append('../MyNoSQL')
 import MyNoSQL
+import time
 
 def getuserid(doc):
 	uidlst = list(db.indexread("userid").values())
@@ -115,27 +118,30 @@ print("")
 #
 
 
-for i in range(10):
+for i in range(3):
 	myobj = newuser()
 	myobj = db.savedoc(myobj)
 	print("myobj: ", myobj)
+	time.sleep(5)
 
 
 rev = db.indexread("rev")
-for i in range(10):
+for i in range(3):
 	print("")
 	id = random.choice(list(rev.keys()))
 	print("id: ", id)
 	myobj2 = db.readdoc(id)
 	print("myobj2: ", myobj2)
-	lb4 = len(myobj2)
-	myobj2a = updateuser(myobj2)
-	print("myobj2a: ", myobj2a)
-	print("len(myobj2a): ", len(myobj2a), "	lb4:", lb4)
-	if len(myobj2a) != lb4:
-		myobj2 = db.savedoc(myobj2a)
-		print("saved myobj2: ", myobj2)
+	# lb4 = len(myobj2)
+	# myobj2a = updateuser(myobj2)
+	# print("myobj2a: ", myobj2a)
+	# print("len(myobj2a): ", len(myobj2a), "	lb4:", lb4)
+	# if len(myobj2a) != lb4:
+	# 	myobj2 = db.savedoc(myobj2a)
+	# 	print("saved myobj2: ", myobj2)
+	time.sleep(5)
 
+time.sleep(60)
 
 
 print("")

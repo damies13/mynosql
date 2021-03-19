@@ -10,6 +10,8 @@ import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer, HTTPServer
 import urllib.parse
+import tempfile
+import inspect
 
 
 class MyNoSQLServer(BaseHTTPRequestHandler):
@@ -39,22 +41,22 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 		message = "Not Found"
 		try:
 			parsed_path = urllib.parse.urlparse(self.path)
-			print("parsed_path:", parsed_path)
+			self.db.debugmsg(5, "parsed_path:", parsed_path)
 			patharr = parsed_path.path.split("/")
-			print("patharr:", patharr)
+			self.db.debugmsg(5, "patharr:", patharr)
 			if (patharr[1] in ["peer", "index", "doc"]):
 				httpcode = 200
 				message = "OK"
 				if patharr[1] == "peer":
 					doc = self.db.getselfdoc()
-					print("doc:", doc)
+					self.db.debugmsg(5, "doc:", doc)
 					message = json.dumps(doc).encode("utf8")
 
 			else:
 				httpcode = 404
 				message = "Unrecognised request: '{}'".format(parsed_path)
 		except Exception as e:
-			print("AgentServer: do_GET:", e)
+			self.db.debugmsg(5, "do_GET:", e)
 			httpcode = 500
 			message = str(e)
 		self.send_response(httpcode)
@@ -62,7 +64,7 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 		self.wfile.write(bytes(message,"utf-8"))
 		threadend = time.time()
 		# base.debugmsg(5, parsed_path.path, "	threadstart:", "%.3f" % threadstart, "threadend:", "%.3f" % threadend, "Time Taken:", "%.3f" % (threadend-threadstart))
-		print("%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
+		self.db.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
 		return
 
 	def handle_http(self):
@@ -80,6 +82,8 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 
 
 class MyNoSQL:
+	version = "0.0.1"
+	debuglvl = 7
 
 	# dbopen = False
 
@@ -90,7 +94,42 @@ class MyNoSQL:
 		self.doc_id = None
 		self.port = 0
 		self.dbopen = False
-		self.dblocation = os.path.dirname(os.path.realpath(__file__))
+		# self.dblocation = os.path.dirname(os.path.realpath(__file__))
+		self.dblocation = tempfile.gettempdir()
+
+
+	def debugmsg(self, lvl, *msg):
+		msglst = []
+		prefix = ""
+		suffix = ""
+		# print("self.debuglvl:",self.debuglvl," >= lvl",lvl,"	", self.debuglvl >= lvl)
+		if self.debuglvl >= lvl:
+			try:
+				# print("self.debuglvl:",self.debuglvl," >= 4","	", self.debuglvl >= 4)
+				if self.debuglvl >= 4:
+					stack = inspect.stack()
+					the_class = stack[1][0].f_locals["self"].__class__.__name__
+					the_method = stack[1][0].f_code.co_name
+					the_line = stack[1][0].f_lineno
+					prefix = "{}: {}({}): [{}:{}]	".format(str(the_class), the_method, the_line, self.debuglvl, lvl)
+					if len(prefix.strip())<32:
+						prefix = "{}	".format(prefix)
+					if len(prefix.strip())<24:
+						prefix = "{}	".format(prefix)
+
+					msglst.append(str(prefix))
+
+					suffix = "	[{} @{}]".format(self.version, str(datetime.datetime.now().isoformat(sep=' ', timespec='seconds')))
+
+				print("msg:",msg)
+				for itm in msg:
+					msglst.append(str(itm))
+				msglst.append(str(suffix))
+				print(" ".join(msglst))
+			except Exception as e:
+				print("e:",e)
+				pass
+
 
 
 	def setdblocation(self, location):
@@ -112,7 +151,7 @@ class MyNoSQL:
 		# try to open a port in range 8800 - 8899
 		for i in range(99):
 			portno = 8800+i
-			print("trying port:", portno)
+			self.debugmsg(0, "trying port:", portno)
 			server_address = ('', portno)
 			reason = ""
 			if self.dbopen:
@@ -128,12 +167,12 @@ class MyNoSQL:
 			if self.port>0:
 				break
 			else:
-				print("open port failed:", reason)
+				self.debugmsg(0, "open port failed:", reason)
 		if self.port>0:
-			print("Server started on port:", self.port)
+			self.debugmsg(0, "Server started on port:", self.port)
 			self.httpserver.serve_forever()
 		else:
-			print("Unable to start server:", reason)
+			self.debugmsg(0, "Unable to start server:", reason)
 
 	def _server(self):
 
@@ -173,8 +212,8 @@ class MyNoSQL:
 				if self.selfurl in list(dbservers.values()):
 					# find doc id
 					for dbserver in dbservers:
-						print("dbserver:", dbserver)
-						print("dbservers[dbserver]:", dbservers[dbserver])
+						self.debugmsg(5, "dbserver:", dbserver)
+						self.debugmsg(5, "dbservers[dbserver]:", dbservers[dbserver])
 						if dbservers[dbserver] == self.selfurl:
 							self.doc_id = dbserver
 							doc = self.readdoc(self.doc_id)
@@ -192,9 +231,11 @@ class MyNoSQL:
 		self.db["dbpath"] = os.path.join(self.dblocation, dbname)
 		if not os.path.isdir(self.db["dbpath"]):
 			os.mkdir(self.db["dbpath"])
+			self.debugmsg(0, "DB Created:", self.db["dbpath"])
 		self.index = os.path.join(self.db["dbpath"], "index")
 		if os.path.isfile(self.index):
 			self.db["index"] = self._loadindex()
+			self.debugmsg(0, "DB Opened:", self.db["dbpath"])
 		else:
 			self.db["index"] = {}
 			self.db["index"]["rev"] = {}
@@ -225,18 +266,18 @@ class MyNoSQL:
 			if (timenow - timestart)>timeout:
 				return False
 				break
-			print("waiting for lock on", filename)
+			self.debugmsg(6, "waiting for lock on", filename)
 			time.sleep(0.1)
 		with open(lockfile, 'w') as f:
 			f.write("{}".format(threading.get_native_id()))
-			# print("lock aquired on", filename)
+			self.debugmsg(9, "lock aquired on", filename)
 		return True
 
 	def _lockrelease(self, filename):
 		lockfile = "{}.lock".format(filename)
 		if os.path.isfile(lockfile):
 			os.remove(lockfile)
-			# print("lock released on", filename)
+			self.debugmsg(9, "lock released on", filename)
 
 	def _saveindex(self):
 		if self._lockaquire(self.index):
@@ -252,7 +293,7 @@ class MyNoSQL:
 			rawdata = file.read()
 			file.close()
 			self._lockrelease(self.index)
-			print("rawdata:", rawdata)
+			self.debugmsg(9, "rawdata:", rawdata)
 			data = self._decompressdata(rawdata)
 			return data
 
@@ -421,7 +462,7 @@ class MyNoSQL:
 		if "local" not in self.db["index"]:
 			self.db["index"]["local"] = {}
 		shard_id = self._getshardid(doc_id)
-		print("shard_id:", shard_id, "	doc_id:", doc_id)
+		self.debugmsg(7, "shard_id:", shard_id, "	doc_id:", doc_id)
 		if "shards" not in self.db:
 			self.db["shards"] = {}
 		if shard_id not in self.db["shards"]:
