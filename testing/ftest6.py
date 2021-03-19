@@ -13,7 +13,8 @@ db = MyNoSQL.MyNoSQL()
 db.opendb("mydb6")
 # print("db.db: ", db.db)
 print("")
-
+db.getdbmode()
+db.setdbmode("Mirror")
 
 
 

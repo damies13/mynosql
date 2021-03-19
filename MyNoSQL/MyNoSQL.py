@@ -12,51 +12,74 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer, HTTPServer
 import urllib.parse
 import tempfile
 import inspect
+import hashlib
+import requests
 
 
 class MyNoSQLServer(BaseHTTPRequestHandler):
 
 	db = None
 
+	# def __init__(self):
+	# 	self.logger = Logger()
+
 	def do_HEAD(self):
 		return
 
 	def do_POST(self):
+		self.logger = Logger()
+
 		threadstart = time.time()
 		httpcode = 200
-		httpcode = 404
-		message = "Unrecognised request: '{}'".format(parsed_path)
+		try:
+			parsed_path = urllib.parse.urlparse(self.path)
+			self.logger.debugmsg(5, "parsed_path:", parsed_path)
+			patharr = parsed_path.path.split("/")
+			self.logger.debugmsg(5, "patharr:", patharr)
+			if (patharr[1] in ["peer"]):
+				httpcode = 200
+				message = "OK"
+
+			httpcode = 404
+			message = "Unrecognised request: '{}'".format(parsed_path)
+		except Exception as e:
+			self.logger.debugmsg(5, "e:", e)
+			httpcode = 500
+			message = str(e)
+
+		self.logger.debugmsg(5, "httpcode:", httpcode, "	message:", message)
 		self.send_response(httpcode)
 		self.end_headers()
 		self.wfile.write(bytes(message,"utf-8"))
 		threadend = time.time()
 		# base.debugmsg(5, parsed_path.path, "	threadstart:", "%.3f" % threadstart, "threadend:", "%.3f" % threadend, "Time Taken:", "%.3f" % (threadend-threadstart))
-		base.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
+		self.logger.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
 		return
 
 	def do_GET(self):
+		self.logger = Logger()
 
 		threadstart = time.time()
 		httpcode = 404
 		message = "Not Found"
 		try:
 			parsed_path = urllib.parse.urlparse(self.path)
-			self.db.debugmsg(5, "parsed_path:", parsed_path)
+			self.logger.debugmsg(5, "parsed_path:", parsed_path)
 			patharr = parsed_path.path.split("/")
-			self.db.debugmsg(5, "patharr:", patharr)
+			self.logger.debugmsg(5, "patharr:", patharr)
 			if (patharr[1] in ["peer", "index", "doc"]):
 				httpcode = 200
 				message = "OK"
 				if patharr[1] == "peer":
 					doc = self.db.getselfdoc()
-					self.db.debugmsg(5, "doc:", doc)
+					self.logger.debugmsg(5, "doc:", doc)
 					message = json.dumps(doc).encode("utf8")
 
 			else:
 				httpcode = 404
 				message = "Unrecognised request: '{}'".format(parsed_path)
 		except Exception as e:
-			self.db.debugmsg(5, "do_GET:", e)
+			self.logger.debugmsg(5, "e:", e)
 			httpcode = 500
 			message = str(e)
 		self.send_response(httpcode)
@@ -64,7 +87,7 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 		self.wfile.write(bytes(message,"utf-8"))
 		threadend = time.time()
 		# base.debugmsg(5, parsed_path.path, "	threadstart:", "%.3f" % threadstart, "threadend:", "%.3f" % threadend, "Time Taken:", "%.3f" % (threadend-threadstart))
-		self.db.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
+		self.logger.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
 		return
 
 	def handle_http(self):
@@ -81,22 +104,9 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 		self.db = db
 
 
-class MyNoSQL:
+class Logger:
 	version = "0.0.1"
 	debuglvl = 7
-
-	# dbopen = False
-
-	def __init__(self):
-		# if not self.dbopen:
-		self.db = {}
-		self.selfurl = None
-		self.doc_id = None
-		self.port = 0
-		self.dbopen = False
-		# self.dblocation = os.path.dirname(os.path.realpath(__file__))
-		self.dblocation = tempfile.gettempdir()
-
 
 	def debugmsg(self, lvl, *msg):
 		msglst = []
@@ -121,7 +131,7 @@ class MyNoSQL:
 
 					suffix = "	[{} @{}]".format(self.version, str(datetime.datetime.now().isoformat(sep=' ', timespec='seconds')))
 
-				print("msg:",msg)
+				# print("msg:",msg)
 				for itm in msg:
 					msglst.append(str(itm))
 				msglst.append(str(suffix))
@@ -130,6 +140,22 @@ class MyNoSQL:
 				print("e:",e)
 				pass
 
+
+class MyNoSQL:
+	timeout=600
+
+	# dbopen = False
+
+	def __init__(self):
+		# if not self.dbopen:
+		self.db = {}
+		self.selfurl = None
+		self.doc_id = None
+		self.port = 0
+		self.dbopen = False
+		# self.dblocation = os.path.dirname(os.path.realpath(__file__))
+		self.dblocation = tempfile.gettempdir()
+		self.logger = Logger()
 
 
 	def setdblocation(self, location):
@@ -151,12 +177,13 @@ class MyNoSQL:
 		# try to open a port in range 8800 - 8899
 		for i in range(99):
 			portno = 8800+i
-			self.debugmsg(0, "trying port:", portno)
+			self.logger.debugmsg(0, "trying port:", portno)
 			server_address = ('', portno)
 			reason = ""
 			if self.dbopen:
 				try:
 					self.httpserver = ThreadingHTTPServer(server_address, MyNoSQLServer)
+					# self.httpserver.setdb(self)
 					self.port = portno
 				except PermissionError:
 					reason = "PermissionError"
@@ -167,12 +194,12 @@ class MyNoSQL:
 			if self.port>0:
 				break
 			else:
-				self.debugmsg(0, "open port failed:", reason)
+				self.logger.debugmsg(0, "open port failed:", reason)
 		if self.port>0:
-			self.debugmsg(0, "Server started on port:", self.port)
+			self.logger.debugmsg(0, "Server started on port:", self.port)
 			self.httpserver.serve_forever()
 		else:
-			self.debugmsg(0, "Unable to start server:", reason)
+			self.logger.debugmsg(0, "Unable to start server:", reason)
 
 	def _server(self):
 
@@ -194,13 +221,47 @@ class MyNoSQL:
 	def _findpeers(self):
 		pass
 
+	def _sendremote(self, uri, payload):
+		try:
+			r = requests.post(uri, json=payload, timeout=self.timeout)
+			self.logger.debugmsg(7, "resp: ", r.status_code, r.text)
+			if (r.status_code != requests.codes.ok):
+				self.logger.debugmsg(5, "r.status_code:", r.status_code, requests.codes.ok)
+				return None
+			else:
+				self.logger.debugmsg(7, "r.json: ", r.json)
+				return r.json
+
+		except Exception as e:
+			self.logger.debugmsg(8, "Exception:", e)
+			return None
+
 	def addpeer(self, peerurl):
+		uri = peerurl + "/Peer"
+		# payload = {
+		# 	"AgentName": self.agentname,
+		# 	"Action": "Status",
+		# 	"Hash": hash
+		# }
+		payload = self.getselfdoc()
+		self.logger.debugmsg(9, "payload: ", payload)
+		self._sendremote(uri, payload)
+
 		pass
 
 	def getselfdoc(self):
-		if self.doc_id is not None:
-			doc = self.readdoc(self.doc_id)
-			return doc
+		if self.dbopen:
+			if self.doc_id is None:
+				self._registerself()
+			if self.doc_id is not None:
+				doc = self.readdoc(self.doc_id)
+				return doc
+			else:
+				raise Exception("self.doc_id is None")
+				return None
+		else:
+			raise Exception("DB not open.")
+			return None
 
 	def _registerself(self):
 		if self.port>0:
@@ -209,33 +270,67 @@ class MyNoSQL:
 				srvdisphost = socket.gethostname()
 				self.selfurl = "http://{}:{}".format(srvdisphost, self.port)
 				dbservers = self.indexread("dbserver")
+				self.logger.debugmsg(7, "dbservers:", dbservers)
 				if self.selfurl in list(dbservers.values()):
 					# find doc id
 					for dbserver in dbservers:
-						self.debugmsg(5, "dbserver:", dbserver)
-						self.debugmsg(5, "dbservers[dbserver]:", dbservers[dbserver])
+						self.logger.debugmsg(5, "dbserver:", dbserver)
+						self.logger.debugmsg(5, "dbservers[dbserver]:", dbservers[dbserver])
 						if dbservers[dbserver] == self.selfurl:
 							self.doc_id = dbserver
+							self.logger.debugmsg(7, "self.doc_id:", self.doc_id)
 							doc = self.readdoc(self.doc_id)
 				else:
 					# create new server doc
 					doc = {}
 					doc["dbserver"] = self.selfurl
 					doc["altconn"] = []
+				if "dbmode" not in doc:
+					doc["dbmode"] = "Peer"
+
 			if doc is not None:
 				t = datetime.datetime.now()
 				doc["lastregistered"] = t.timestamp()
 				self.savedoc(doc)
 
+	def getdbmode(self):
+		if self.dbopen:
+			doc = self.getselfdoc()
+			if "dbmode" in doc:
+				return doc["dbmode"]
+			else:
+				return None
+		else:
+			return None
+
+	def setdbmode(self, newmode):
+		# check for supported modes
+		self.logger.debugmsg(5, "newmode:", newmode)
+		if newmode not in ["Peer", "Mirror"]:
+			return False
+		if self.dbopen:
+			doc = self.getselfdoc()
+			if "dbmode" not in doc:
+				doc["dbmode"] = newmode
+				self.savedoc(doc)
+			else:
+				if doc["dbmode"] is not newmode:
+					doc["dbmode"] = newmode
+					self.savedoc(doc)
+			self.logger.debugmsg(7, "doc:", doc)
+			return True
+		else:
+			return False
+
 	def opendb(self, dbname):
 		self.db["dbpath"] = os.path.join(self.dblocation, dbname)
 		if not os.path.isdir(self.db["dbpath"]):
 			os.mkdir(self.db["dbpath"])
-			self.debugmsg(0, "DB Created:", self.db["dbpath"])
+			self.logger.debugmsg(0, "DB Created:", self.db["dbpath"])
 		self.index = os.path.join(self.db["dbpath"], "index")
 		if os.path.isfile(self.index):
 			self.db["index"] = self._loadindex()
-			self.debugmsg(0, "DB Opened:", self.db["dbpath"])
+			self.logger.debugmsg(0, "DB Opened:", self.db["dbpath"])
 		else:
 			self.db["index"] = {}
 			self.db["index"]["rev"] = {}
@@ -266,18 +361,18 @@ class MyNoSQL:
 			if (timenow - timestart)>timeout:
 				return False
 				break
-			self.debugmsg(6, "waiting for lock on", filename)
+			self.logger.debugmsg(6, "waiting for lock on", filename)
 			time.sleep(0.1)
 		with open(lockfile, 'w') as f:
 			f.write("{}".format(threading.get_native_id()))
-			self.debugmsg(9, "lock aquired on", filename)
+			self.logger.debugmsg(9, "lock aquired on", filename)
 		return True
 
 	def _lockrelease(self, filename):
 		lockfile = "{}.lock".format(filename)
 		if os.path.isfile(lockfile):
 			os.remove(lockfile)
-			self.debugmsg(9, "lock released on", filename)
+			self.logger.debugmsg(9, "lock released on", filename)
 
 	def _saveindex(self):
 		if self._lockaquire(self.index):
@@ -293,7 +388,7 @@ class MyNoSQL:
 			rawdata = file.read()
 			file.close()
 			self._lockrelease(self.index)
-			self.debugmsg(9, "rawdata:", rawdata)
+			self.logger.debugmsg(9, "rawdata:", rawdata)
 			data = self._decompressdata(rawdata)
 			return data
 
@@ -382,6 +477,12 @@ class MyNoSQL:
 			return True
 		return False
 
+	def _dochash(self, doc):
+		hasher = hashlib.md5()
+		# hasher.update(str(os.path.getmtime(file)).encode('utf-8'))
+		hasher.update(json.dumps(doc).encode("utf8"))
+		return hasher.hexdigest()
+
 
 	def savedoc(self, doc):
 		t = datetime.datetime.now()
@@ -393,10 +494,16 @@ class MyNoSQL:
 			self.db["documents"] = {}
 		if doc["id"] not in self.db["documents"]:
 			self.db["documents"][doc["id"]] = {}
-		self.db["documents"][doc["id"]]["data"] = doc
-		self.db["documents"][doc["id"]]["accessed"] = t.timestamp()
-		self._savetoshard(doc["id"])
-		self._indexdoc(doc)
+
+		if "dochash" not in self.db["documents"][doc["id"]] or \
+			self.db["documents"][doc["id"]]["dochash"] is not self._dochash(doc):
+
+			doc = self._updaterev(doc)
+			self.db["documents"][doc["id"]]["data"] = doc
+			self.db["documents"][doc["id"]]["accessed"] = t.timestamp()
+			self.db["documents"][doc["id"]]["dochash"] = self._dochash(doc)
+			self._savetoshard(doc["id"])
+			self._indexdoc(doc)
 		return doc
 
 	def readdoc(self, doc_id):
@@ -419,6 +526,7 @@ class MyNoSQL:
 
 			doc = self.db["documents"][doc_id]["data"]
 			self.db["documents"][doc_id]["accessed"] = t.timestamp()
+			self.db["documents"][doc_id]["dochash"] = self._dochash(doc)
 
 			self._indexdoc(doc)
 		return doc
@@ -462,7 +570,7 @@ class MyNoSQL:
 		if "local" not in self.db["index"]:
 			self.db["index"]["local"] = {}
 		shard_id = self._getshardid(doc_id)
-		self.debugmsg(7, "shard_id:", shard_id, "	doc_id:", doc_id)
+		self.logger.debugmsg(7, "shard_id:", shard_id, "	doc_id:", doc_id)
 		if "shards" not in self.db:
 			self.db["shards"] = {}
 		if shard_id not in self.db["shards"]:
