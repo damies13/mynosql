@@ -36,7 +36,7 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 			self.logger.debugmsg(5, "parsed_path:", parsed_path)
 			patharr = parsed_path.path.split("/")
 			self.logger.debugmsg(5, "patharr:", patharr)
-			if (patharr[1] in ["peer"]):
+			if (patharr[1] in ["Peer"]):
 				httpcode = 200
 				message = "OK"
 
