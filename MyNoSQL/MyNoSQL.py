@@ -15,10 +15,10 @@ import inspect
 import hashlib
 import requests
 
+db = None
+
 
 class MyNoSQLServer(BaseHTTPRequestHandler):
-
-	db = None
 
 	# def __init__(self):
 	# 	self.logger = Logger()
@@ -39,6 +39,8 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 			if (patharr[1] in ["Peer"]):
 				httpcode = 200
 				message = "OK"
+
+				self.logger.debugmsg(5, "db:", db)
 
 			httpcode = 404
 			message = "Unrecognised request: '{}'".format(parsed_path)
@@ -148,6 +150,7 @@ class MyNoSQL:
 
 	def __init__(self):
 		# if not self.dbopen:
+		global db
 		self.db = {}
 		self.selfurl = None
 		self.doc_id = None
@@ -156,7 +159,7 @@ class MyNoSQL:
 		# self.dblocation = os.path.dirname(os.path.realpath(__file__))
 		self.dblocation = tempfile.gettempdir()
 		self.logger = Logger()
-
+		db = self
 
 	def setdblocation(self, location):
 		if os.path.isdir(location):
