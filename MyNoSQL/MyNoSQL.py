@@ -18,6 +18,13 @@ import requests
 
 db = None
 
+ONE_MINUTE = 60
+ONE_HOUR = 60 * ONE_MINUTE
+ONE_DAY = 24 * ONE_HOUR
+ONE_WEEK = 7 * ONE_DAY
+ONE_MONTH = 4 * ONE_WEEK
+ONE_YEAR = 52 * ONE_WEEK
+
 
 class MyNoSQLServer(BaseHTTPRequestHandler):
 
@@ -299,12 +306,12 @@ class MyNoSQL:
 		selfdoc = self.getselfdoc()
 		if selfdoc["dbmode"] == "Peer":
 			mirrorid = random.choice(self.db["peers"])
-			self._getpeerupdates(mirrorid)
+			self._getpeerupdates(mirrorid, selfdoc["dbmode"])
 		if selfdoc["dbmode"] == "Mirror":
 			for peer in self.db["peers"]:
-				self._getpeerupdates(peer)
+				self._getpeerupdates(peer, selfdoc["dbmode"])
 
-	def _getpeerupdates(self, doc_id):
+	def _getpeerupdates(self, doc_id, mode):
 		self.debugmsg(8, "doc_id:", doc_id)
 		peerdoc = self.readdoc(doc_id)
 		if "dbserver" in peerdoc:
@@ -313,6 +320,30 @@ class MyNoSQL:
 				self.debugmsg(8, "peerindexes:", peerindexes)
 				for index in peerindexes:
 					self._updatepeerindex(peerdoc["dbserver"], index)
+		if mode == "Mirror":
+			peerrevs = self._getremote(peerdoc["dbserver"] + "/Index/rev")
+			self.debugmsg(8, "peerrevs:", peerrevs)
+			if peerrevs is not None:
+				t = datetime.datetime.now()
+				for peerrev in peerrevs:
+					rdet = self._revdetail(peerrevs[peerrev])
+					self.debugmsg(7, "rdet:", rdet)
+					getremote = False
+					if rdet["epoch"] > (t.timestamp() - ONE_YEAR):
+						islocal = self._islocal(peerrev)
+						if islocal is None:
+							getremote = True
+						else:
+							ldet = self._revdetail(islocal)
+							if rdet["number"] > ldet["number"]:
+								getremote = True
+
+						self.debugmsg(7, "getremote:", getremote)
+						if getremote:
+							rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + peerrev)
+							self.debugmsg(7, "rdoc:", rdoc)
+							self._saveremotedoc(rdoc)
+
 
 	def _updatepeerindex(self, peerurl, index):
 		self.debugmsg(8, "index:", index)
@@ -581,6 +612,8 @@ class MyNoSQL:
 			return True
 		if "rev" not in doc:
 			return False
+		if self._islocal(id) is None:
+			return True
 		odoc = self.readdoc(id)
 		if doc["rev"] != odoc["rev"]:
 			cdet = self._revdetail(doc["rev"])
@@ -712,7 +745,9 @@ class MyNoSQL:
 
 	def readdoc(self, doc_id):
 		doc = None
-		if self._islocal(doc_id) is not None:
+		islocal = self._islocal(doc_id)
+		self.debugmsg(8, "doc_id:", doc_id, "islocal:", islocal)
+		if islocal is not None:
 			t = datetime.datetime.now()
 			if "documents" not in self.db:
 				self.db["documents"] = {}
@@ -752,17 +787,29 @@ class MyNoSQL:
 	def _islocal(self, doc_id):
 		if "local" not in self.db["index"]:
 			self.db["index"]["local"] = {}
+		# self.debugmsg(9, "index local keys:", self.db["index"]["local"].keys())
+		# if doc_id in self.db["index"]["local"].keys():
+		# 	self.debugmsg(6, "doc_id:", doc_id, ":", self.db["index"]["local"][doc_id])
+		# 	return self.db["index"]["local"][doc_id]
+
 		if doc_id in self.db["index"]["local"].keys():
-			return self.db["index"]["local"][doc_id]
+			del self.db["index"]["local"][doc_id]
 
 		shard_id = self._getshardid(doc_id)
+		# self.debugmsg(9, "shard_id:", shard_id, "doc_id:", doc_id)
 		if "shards" not in self.db:
 			self.db["shards"] = {}
 		if shard_id not in self.db["shards"]:
 			self.db["shards"][shard_id] = self._loadshard(shard_id)
-			for id in list(self.db["shards"][shard_id].keys()):
-				self.db["index"]["local"][id] = self.db["shards"][shard_id][id]["rev"]
-			self._freeshard(shard_id)
+			# self.debugmsg(9, "shard_id:", shard_id, ":", self.db["shards"][shard_id])
+			if len(self.db["shards"][shard_id])>0:
+				for id in list(self.db["shards"][shard_id].keys()):
+					# self.debugmsg(9, "id:", id, ":", self.db["shards"][shard_id][id])
+					self.db["index"]["local"][id] = self.db["shards"][shard_id][id]["rev"]
+				self._freeshard(shard_id)
+			else:
+				self._freeshard(shard_id)
+				return None
 
 		if doc_id in self.db["index"]["local"].keys():
 			return self.db["index"]["local"][doc_id]
