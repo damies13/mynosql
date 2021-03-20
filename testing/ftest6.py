@@ -18,7 +18,7 @@ db.setdbmode("Mirror")
 
 
 
-for i in range(1):
+for i in range(5):
 	time.sleep(60)
 
 

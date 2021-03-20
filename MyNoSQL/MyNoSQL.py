@@ -5,6 +5,7 @@ import os
 import datetime
 import time
 import shutil
+import random
 
 import socket
 import threading
@@ -55,8 +56,11 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 					db.debugmsg(5, "db:", db)
 					db.debugmsg(5, "db.doc_id:", db.doc_id)
 
-					saved = db._saveremotedoc(doc)
-					db.debugmsg(5, "saved:", saved)
+					if "id" in doc:
+						db._registerpeer(doc["id"])
+
+						saved = db._saveremotedoc(doc)
+						db.debugmsg(5, "saved:", saved)
 
 
 		except Exception as e:
@@ -96,6 +100,29 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 					db.debugmsg(5, "doc:", doc)
 					# message = json.dumps(doc).encode("utf8")
 					message = json.dumps(doc)
+
+				if patharr[1].lower() == "index":
+					if len(patharr)>2:
+						if patharr[2] in db._indexlist():
+							message = json.dumps(db.indexread(patharr[2]))
+						else:
+							httpcode = 404
+							message = "Index Not Found"
+					else:
+						message = json.dumps(db._indexlist())
+
+
+				if patharr[1].lower() == "doc":
+					if len(patharr)>2:
+						doc = db.readdoc(patharr[2])
+						if doc is not None:
+							message = json.dumps(doc)
+						else:
+							httpcode = 404
+							message = "Document not found"
+					else:
+						httpcode = 404
+						message = "Document ID Required"
 
 			else:
 				httpcode = 404
@@ -214,11 +241,11 @@ class MyNoSQL:
 			else:
 				reason = "DB Closed"
 			if self.port>0:
-				self.doc_id = self._registerself()
 				break
 			else:
 				self.debugmsg(0, "open port failed:", reason)
 		if self.port>0:
+			self.doc_id = self._registerself()
 			self.debugmsg(0, "Server started on port:", self.port)
 			self.httpserver.serve_forever()
 		else:
@@ -238,23 +265,83 @@ class MyNoSQL:
 
 			time.sleep(60)
 
+			upd = threading.Thread(target=self._peerupdates)
+			upd.start()
+
+
 		self.httpserver.shutdown()
 		self.dbserver.join()
 
+	def _registerpeer(self, doc_id):
+		if "peers" not in self.db:
+			self.db["peers"] = []
+		if doc_id not in self.db["peers"]:
+			self.db["peers"].append(doc_id)
+
 	def _findpeers(self):
-		pass
+		time.sleep(5)
+		dbservers = self.indexread("dbserver")
+		self.debugmsg(5, "dbservers:", dbservers)
+		for dbserver in dbservers:
+			self.debugmsg(5, "dbserver:", dbserver)
+			self.debugmsg(5, "dbservers[dbserver]:", dbservers[dbserver])
+			if dbserver != self.doc_id:
+				# indexes = self._getremote(dbservers[dbserver] + "/Index")
+				# self.debugmsg(5, "indexes:", indexes)
+				dbserverdoc = self.readdoc(dbserver)
+				if dbserverdoc["dbmode"] != "Peer":
+					self._registerpeer(dbserver)
+
+
+	def _peerupdates(self):
+		if "peers" not in self.db:
+			self.db["peers"] = []
+		selfdoc = self.getselfdoc()
+		if selfdoc["dbmode"] == "Peer":
+			mirrorid = random.choice(self.db["peers"])
+			self._getpeerupdates(mirrorid)
+		if selfdoc["dbmode"] == "Mirror":
+			for peer in self.db["peers"]:
+				self._getpeerupdates(peer)
+
+	def _getpeerupdates(self, doc_id):
+		self.debugmsg(8, "doc_id:", doc_id)
+		peerdoc = self.readdoc(doc_id)
+		if "dbserver" in peerdoc:
+			peerindexes = self._getremote(peerdoc["dbserver"] + "/Index")
+			if peerindexes is not None:
+				self.debugmsg(8, "peerindexes:", peerindexes)
+				for index in peerindexes:
+					self._updatepeerindex(peerdoc["dbserver"], index)
+
+	def _updatepeerindex(self, peerurl, index):
+		self.debugmsg(8, "index:", index)
+		indexremote = self._getremote(peerurl + "/Index/" + index)
+		self.debugmsg(8, "index:", index, "indexremote:", indexremote)
+		indexlocal = self.indexread(index)
+		self.debugmsg(8, "index:", index, "indexlocal:", indexlocal)
+		for item in indexremote:
+			self.debugmsg(8, "item:", item)
+			if item not in indexlocal.keys():
+				self._indexadd(index, item, indexremote[item])
+			if index == "rev":
+				# compare revisions
+				rdet = self._revdetail(indexremote[item])
+				ldet = self._revdetail(indexlocal[item])
+				if rdet["number"] > ldet["number"]:
+					self._indexadd(index, indexremote, indexremote[item])
 
 	def _getremote(self, uri):
 		try:
 			r = requests.get(uri, timeout=self.timeout)
-			self.debugmsg(7, "resp: ", r.status_code, r.text)
+			self.debugmsg(9, "resp: ", r.status_code, "r.text:", r.text)
 			if (r.status_code != requests.codes.ok):
-				self.debugmsg(7, "r.status_code:", r.status_code, "!=", requests.codes.ok)
+				self.debugmsg(9, "r.status_code:", r.status_code, "!=", requests.codes.ok)
 				return None
 			else:
-				if "{" in r.text:
+				if "{" in r.text or "[" in r.text:
 					jsonresp = json.loads(r.text)
-					self.debugmsg(7, "jsonresp: ", jsonresp)
+					self.debugmsg(9, "jsonresp: ", jsonresp)
 					return jsonresp
 				else:
 					return r.text
@@ -266,14 +353,14 @@ class MyNoSQL:
 	def _sendremote(self, uri, payload):
 		try:
 			r = requests.post(uri, json=payload, timeout=self.timeout)
-			self.debugmsg(7, "resp: ", r.status_code, r.text)
+			self.debugmsg(9, "resp: ", r.status_code, r.text)
 			if (r.status_code != requests.codes.ok):
-				self.debugmsg(7, "r.status_code:", r.status_code, "!=", requests.codes.ok)
+				self.debugmsg(9, "r.status_code:", r.status_code, "!=", requests.codes.ok)
 				return None
 			else:
-				if "{" in r.text:
+				if "{" in r.text or "[" in r.text:
 					jsonresp = json.loads(r.text)
-					self.debugmsg(7, "jsonresp: ", jsonresp)
+					self.debugmsg(9, "jsonresp: ", jsonresp)
 					return jsonresp
 				else:
 					return r.text
@@ -509,6 +596,23 @@ class MyNoSQL:
 
 		return True
 
+	def _indexadd(self, key, doc_id, value):
+		changed = False
+		# self.debugmsg(9, "key:", key)
+		if key not in self._indexlist():
+			self.indexadd(key)
+		# self.debugmsg(9, "doc_id:", doc_id)
+		if doc_id not in self.db["index"][key].keys():
+			self.db["index"][key][doc_id] = value
+			changed = True
+		# self.debugmsg(9, "value:", value)
+		if self.db["index"][key][doc_id] != value:
+			self.db["index"][key][doc_id] = value
+			changed = True
+
+		# self.debugmsg(9, "changed:", changed)
+		if changed:
+			self._saveindex()
 
 	def _indexdoc(self, doc):
 		changed = False
@@ -521,6 +625,11 @@ class MyNoSQL:
 					changed = True
 		if changed:
 			self._saveindex()
+
+	def _indexlist(self):
+		idxlst = list(self.db["index"].keys())
+		# self.debugmsg(9, "idxlst:", idxlst)
+		return idxlst
 
 	def indexadd(self, index):
 		if index not in self.db["index"]:
