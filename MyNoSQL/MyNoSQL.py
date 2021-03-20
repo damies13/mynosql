@@ -29,21 +29,37 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 	def do_POST(self):
 		self.logger = Logger()
 
+		print("")
+		print("--------------- <do_POST> ---------------")
 		threadstart = time.time()
-		httpcode = 200
+		# default result
+		httpcode = 404
 		try:
 			parsed_path = urllib.parse.urlparse(self.path)
 			self.logger.debugmsg(5, "parsed_path:", parsed_path)
 			patharr = parsed_path.path.split("/")
 			self.logger.debugmsg(5, "patharr:", patharr)
-			if (patharr[1] in ["Peer"]):
+
+			message = "Unrecognised request: '{}'".format(parsed_path)
+
+			if (patharr[1].lower() in ["peer"]):
 				httpcode = 200
 				message = "OK"
 
-				self.logger.debugmsg(5, "db:", db)
+				if patharr[1].lower() == "peer":
+					content_len = int(self.headers.get('Content-Length'))
+					post_body = self.rfile.read(content_len)
+					doc = json.loads(post_body)
 
-			httpcode = 404
-			message = "Unrecognised request: '{}'".format(parsed_path)
+					self.logger.debugmsg(5, "doc:", doc)
+
+					self.logger.debugmsg(5, "db:", db)
+					self.logger.debugmsg(5, "db.doc_id:", db.doc_id)
+
+					saved = db._saveremotedoc(doc)
+					self.logger.debugmsg(5, "saved:", saved)
+
+
 		except Exception as e:
 			self.logger.debugmsg(5, "e:", e)
 			httpcode = 500
@@ -56,11 +72,15 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 		threadend = time.time()
 		# base.debugmsg(5, parsed_path.path, "	threadstart:", "%.3f" % threadstart, "threadend:", "%.3f" % threadend, "Time Taken:", "%.3f" % (threadend-threadstart))
 		self.logger.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
+		print("--------------- </do_POST> ---------------")
+		print("")
 		return
 
 	def do_GET(self):
 		self.logger = Logger()
 
+		print("")
+		print("--------------- <do_GET> ---------------")
 		threadstart = time.time()
 		httpcode = 404
 		message = "Not Found"
@@ -69,13 +89,15 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 			self.logger.debugmsg(5, "parsed_path:", parsed_path)
 			patharr = parsed_path.path.split("/")
 			self.logger.debugmsg(5, "patharr:", patharr)
-			if (patharr[1] in ["peer", "index", "doc"]):
+			if (patharr[1].lower() in ["peer", "index", "doc"]):
 				httpcode = 200
 				message = "OK"
-				if patharr[1] == "peer":
-					doc = self.db.getselfdoc()
+				if patharr[1].lower() == "peer":
+					self.logger.debugmsg(5, "db:", db)
+					doc = db.getselfdoc()
 					self.logger.debugmsg(5, "doc:", doc)
-					message = json.dumps(doc).encode("utf8")
+					# message = json.dumps(doc).encode("utf8")
+					message = json.dumps(doc)
 
 			else:
 				httpcode = 404
@@ -90,6 +112,8 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 		threadend = time.time()
 		# base.debugmsg(5, parsed_path.path, "	threadstart:", "%.3f" % threadstart, "threadend:", "%.3f" % threadend, "Time Taken:", "%.3f" % (threadend-threadstart))
 		self.logger.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
+		print("--------------- </do_GET> ---------------")
+		print("")
 		return
 
 	def handle_http(self):
@@ -195,6 +219,7 @@ class MyNoSQL:
 			else:
 				reason = "DB Closed"
 			if self.port>0:
+				self.doc_id = self._registerself()
 				break
 			else:
 				self.logger.debugmsg(0, "open port failed:", reason)
@@ -224,16 +249,39 @@ class MyNoSQL:
 	def _findpeers(self):
 		pass
 
+	def _getremote(self, uri):
+		try:
+			r = requests.get(uri, timeout=self.timeout)
+			self.logger.debugmsg(7, "resp: ", r.status_code, r.text)
+			if (r.status_code != requests.codes.ok):
+				self.logger.debugmsg(7, "r.status_code:", r.status_code, "!=", requests.codes.ok)
+				return None
+			else:
+				if "{" in r.text:
+					jsonresp = json.loads(r.text)
+					self.logger.debugmsg(7, "jsonresp: ", jsonresp)
+					return jsonresp
+				else:
+					return r.text
+
+		except Exception as e:
+			self.logger.debugmsg(8, "Exception:", e)
+			return None
+
 	def _sendremote(self, uri, payload):
 		try:
 			r = requests.post(uri, json=payload, timeout=self.timeout)
 			self.logger.debugmsg(7, "resp: ", r.status_code, r.text)
 			if (r.status_code != requests.codes.ok):
-				self.logger.debugmsg(5, "r.status_code:", r.status_code, requests.codes.ok)
+				self.logger.debugmsg(7, "r.status_code:", r.status_code, "!=", requests.codes.ok)
 				return None
 			else:
-				self.logger.debugmsg(7, "r.json: ", r.json)
-				return r.json
+				if "{" in r.text:
+					jsonresp = json.loads(r.text)
+					self.logger.debugmsg(7, "jsonresp: ", jsonresp)
+					return jsonresp
+				else:
+					return r.text
 
 		except Exception as e:
 			self.logger.debugmsg(8, "Exception:", e)
@@ -248,14 +296,18 @@ class MyNoSQL:
 		# }
 		payload = self.getselfdoc()
 		self.logger.debugmsg(9, "payload: ", payload)
-		self._sendremote(uri, payload)
-
+		resp = self._sendremote(uri, payload)
+		self.logger.debugmsg(5, "resp: ", resp)
+		peerdoc = self._getremote(uri)
+		self.logger.debugmsg(5, "peerdoc: ", peerdoc)
+		if "id" in peerdoc:
+			self._saveremotedoc(peerdoc)
 		pass
 
 	def getselfdoc(self):
 		if self.dbopen:
 			if self.doc_id is None:
-				self._registerself()
+				self.doc_id = self._registerself()
 			if self.doc_id is not None:
 				doc = self.readdoc(self.doc_id)
 				return doc
@@ -295,6 +347,7 @@ class MyNoSQL:
 				t = datetime.datetime.now()
 				doc["lastregistered"] = t.timestamp()
 				self.savedoc(doc)
+			return self.doc_id
 
 	def getdbmode(self):
 		if self.dbopen:
@@ -418,8 +471,22 @@ class MyNoSQL:
 		if "rev" in doc:
 			srev = doc["rev"].split(".", 1)[0]
 			irev = int(srev)
-		doc["rev"] = "{}.{}".format(irev+1, t.timestamp())
+
+		ts = t.timestamp()
+		tss = int(ts)
+		tsm = int("{}".format(ts - tss).split(".")[1][0:6])
+		doc["rev"] = "{}.{:x}.{:x}".format(irev+1, tss, tsm)
+		self.logger.debugmsg(8, "doc[rev]:", doc["rev"])
 		return doc
+
+	def _revdetail(self, rev):
+		detail = {}
+		detail["string"] = rev
+		arev = rev.split(".")
+		detail["number"] = int(arev[0])
+
+
+		return detail
 
 	def _checkrev(self, doc):
 		if "id" not in doc:
@@ -431,7 +498,14 @@ class MyNoSQL:
 			return False
 		odoc = self.readdoc(id)
 		if doc["rev"] != odoc["rev"]:
-			raise Exception("Document revisions don't match")
+			cdet = self._revdetail(doc["rev"])
+			self.logger.debugmsg(5, "cdet:", cdet)
+			odet = self._revdetail(odoc["rev"])
+			self.logger.debugmsg(5, "odet:", odet)
+			if cdet["number"] > odet["number"]:
+				return True
+
+			raise Exception("Document revisions don't match:", doc["rev"], "!=", odoc["rev"])
 			return False
 
 		return True
@@ -486,20 +560,39 @@ class MyNoSQL:
 		hasher.update(json.dumps(doc).encode("utf8"))
 		return hasher.hexdigest()
 
-
-	def savedoc(self, doc):
+	def _saveremotedoc(self, doc):
 		t = datetime.datetime.now()
 		self._checkrev(doc)
 		if "id" not in doc:
 			doc["id"] = self._generatedocid()
-		doc = self._updaterev(doc)
+		doc_id = doc["id"]
 		if "documents" not in self.db:
 			self.db["documents"] = {}
 		if doc["id"] not in self.db["documents"]:
 			self.db["documents"][doc["id"]] = {}
 
 		if "dochash" not in self.db["documents"][doc["id"]] or \
-			self.db["documents"][doc["id"]]["dochash"] is not self._dochash(doc):
+			self.db["documents"][doc["id"]]["dochash"] != self._dochash(doc):
+			self.db["documents"][doc["id"]]["data"] = doc
+			self.db["documents"][doc["id"]]["accessed"] = t.timestamp()
+			self.db["documents"][doc["id"]]["dochash"] = self._dochash(doc)
+			self._savetoshard(doc["id"])
+			self._indexdoc(doc)
+		return doc
+
+	def savedoc(self, doc):
+		t = datetime.datetime.now()
+		self._checkrev(doc)
+		if "id" not in doc:
+			doc["id"] = self._generatedocid()
+		doc_id = doc["id"]
+		if "documents" not in self.db:
+			self.db["documents"] = {}
+		if doc["id"] not in self.db["documents"]:
+			self.db["documents"][doc["id"]] = {}
+
+		if "dochash" not in self.db["documents"][doc["id"]] or \
+			self.db["documents"][doc["id"]]["dochash"] != self._dochash(doc):
 
 			doc = self._updaterev(doc)
 			self.db["documents"][doc["id"]]["data"] = doc
@@ -525,11 +618,11 @@ class MyNoSQL:
 				self.db["documents"][doc_id] = {}
 				self.db["documents"][doc_id]["data"] = self.db["shards"][shard_id][doc_id]
 				self.db["documents"][doc_id]["accessed"] = t.timestamp()
+				self.db["documents"][doc_id]["dochash"] = self._dochash(doc)
 				self._freeshard(shard_id)
 
 			doc = self.db["documents"][doc_id]["data"]
 			self.db["documents"][doc_id]["accessed"] = t.timestamp()
-			self.db["documents"][doc_id]["dochash"] = self._dochash(doc)
 
 			self._indexdoc(doc)
 		return doc
