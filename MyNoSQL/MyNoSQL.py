@@ -480,6 +480,9 @@ class MyNoSQL:
 		arev = rev.split(".")
 		detail["number"] = int(arev[0])
 
+		# hex_val = 'beef101'
+		# print(int(hex_val, 16))
+		detail["epoch"] = float("{}.{}".format(int(arev[1], 16), int(arev[2], 16)))
 
 		return detail
 
@@ -494,9 +497,10 @@ class MyNoSQL:
 		odoc = self.readdoc(id)
 		if doc["rev"] != odoc["rev"]:
 			cdet = self._revdetail(doc["rev"])
-			self.debugmsg(5, "cdet:", cdet)
+			# self.debugmsg(5, "cdet:", cdet)
 			odet = self._revdetail(odoc["rev"])
-			self.debugmsg(5, "odet:", odet)
+			# self.debugmsg(5, "odet:", odet)
+			# self.debugmsg(5, "type(odet[epoch]):", type(odet["epoch"]))	type(odet[epoch]): <class 'float'>
 			if cdet["number"] > odet["number"]:
 				return True
 
