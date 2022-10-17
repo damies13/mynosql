@@ -1,16 +1,106 @@
-# mynosql
-mynosql is a distributed nosql style database written completely in python as a python library.
+# MyNoSQL
 
-The intention is that mynosql would be embeded in a python application as a client mode and on an application server in mirror mode, this way your client application has fast cached access to records that were created locally, the files get mirrored to the application server and if the client application needs to access files created on another client can quickly pull that record (or an update) from the application server and then access it from the local cache.
+The MyNoSQL Module provides a distributed no-sql database library that is intended to be embedded into python applications. It allows fast local reading and writing of records, taking care of data replication for you regardless of the reliability of your network connection.
 
-Examples where this might be useful:
-1. You are developing a mobile game, your game needs records from the game server (user accounts, level maps etc) the problem is when game users have flaky, poor or no internet connection then the game fails to load or stutters as these resources need to be downloaded every time unless you have a way to cache the resources and then check them for updates. mynosql will take care of all this for you, all you need to do is write the data to the local mynosql instance and mynosql will version the record, when you request to read the record mynosql will check for an update version on the server, if the locally cached version is current or the server can't be reached the local cached version is returned, otherwise the server version is downloaded and returned and the cache updated.
-2. You have a network IOT data loggers, where the network access is intermitant, running mynosql in client mode on the data loggers allows you to log the data to the local mynosql instance and mynosql will take care of ensureing the mirror server is updated as soon as a connection is availalbe, if the connection is not up long enough to send all records mynosql will keep track and continue upadting the server when the connection is next available.
+By using a MyNoSQL database you are freed from needing to worry about ensuring data gets to where it need to go or handling errors related to bad network connections.
+- You write to the database locally knowing MyNoSQL will take care of ensuring eventually it will be replicated to the mirror in the background, you don't need to wait for that to happen in your application.
+- You make a local read request and MyNoSQL will return the document as quickly as possible, taking care of caching and only requesting the document from the remote mirror if it's changed
 
-mynosql stores all records in compressed files to minimise the disk space requirements, it also keeps regularly accessed records in memory but is proactive in removing stale records from memory to minimise the memory consumption.
+The MyNoSQL database will be respectful of your machine resources and will not waste them unnecessarily:
+- Records are purged from ram when no longer in use
+- All data stored on disk is compressed with LZMA compression to minimise disk usage
+-Records are not stored as individual files but in a shard of files, allowing each shard to grow and use a whole block on a disk, reducing the number of partially used blocks (wasted space on a disk).
+- Network traffic is minimised by only transferring records when they change. This is done via a record index that tracks the revisions of all documents, MyNoSQL databases request each other's indexes and update their own index when there is a newer record. This allows MyNoSQL to know if the local copy of a record is current and can be returned immediately or if a newer version need to be downloaded.
 
-At the moment there is no documentation other than the library code itself, and the examples in the testing directory, ftest5.py being a client that generates records with random data and ftest6.py being a mirror (server) that pulls new and updated records from ftest5.py.
+While there is no limit to applications that could use MyNoSQL, here are some example applications where MyNoSQL's features could be valuable:
+- IoT data logging with central data storage, each data logger would be a peer, with your central location having 1 or more mirrors. The data logging application would write to the local peer database allowing your data logging application to continue with it's data logging activities and the MyNoSQL will replicate the logged data to the mirror(s) in the background when connectivity is available
+- Multiplayer games, implementing MyNoSQL in a multiplayer game would allow the game developer to significantly reduce the load on their game servers as game clients running a peer replica of the game database would only need to download game resources as they change and would only poll the game server for the a single index update rather than polling every resource to determine if the resource has changed or worse yet downloading every resource if caching is not implemented. Additionally implementing MyNoSQL allows the player to continue playing and save gameplay state even when their internet connection is lost without the game developer needing to handle these scenarios, MyNoSQL will update the save states to the game server when the internet connection is restored.
+- Block chains, MyNoSQL could make development of a block chain simpler, the block chain application only need to worry about reading, writing and validating block records.
 
-I created this for a project I'm planning in the future, as I wasn't happy with how couchdb worked with replicas and there was no better nosql or sql database solution. Specifically none of the other databases I cam accross allowed a client to have a partial replica where the contents of the partial replica are base on the clients usage and can be different partial replicas on each client.
+## Using this module
 
-If you think this might be useful to you, please let me know and i'll prioritise some documentation.
+First import the module and create a database instance
+```python
+import MyNoSQL
+
+db = MyNoSQL.MyNoSQL()
+db.opendb("YourDatabseName")
+```
+
+### Changing database mode
+The default mode for a MyNoSQL is peer, you will need at least one mirror, typically this is your application server. When your MyNoSQL instance is it's mode changed, the new mode is remembered, so this only needs to be called once, not every time the application is launched.
+```python
+db.setdbmode("Mirror")  # optional
+```
+
+### Connecting to a database mirror
+In order for database replication to happen, either remote storage of records or retrieving of records created you will need to connect to a mirror, you don't need to connect to multiple mirrors though as once connected to the first mirror a list of all available mirrors is retrieved and stored locally, so this only needs to be called once, not every time the application is launched.
+```python
+db.addpeer("http://mirrorhostname:8800")
+```
+
+### Saving a record
+MyNoSQL records are simply a python dictionary object, anything that can be stored in a python dictionary can be stored in a MyNoSQL record.
+
+The following are reserved dictionary keys:
+- id: the record id, you can set this to any value you wish, if you do not provide an id then one will be generated on first save. If you change the record id then it will be treated as a new record.
+- rev: the recored revision, this will be created if not provided or in an invalid format, and incremented if one is provided, however the record will not be saved if there is a later revision for the same record id. You should always check you have the latest revision of a record before updating it.
+
+Saving a record is as simple as:
+```python
+myrecord = db.savedoc(myrecord)
+```
+The returned record contains the generated id if you did not provide one and the updated record revision.
+
+### Reading a record
+Reading a record is as simple as:
+```python
+myrecord = db.readdoc(myrecordid)
+```
+
+- If the record's latest revision is available locally it will be returned immediately
+- if the record's latest revision is not available locally, it would be downloaded then returned
+
+
+
+## DB Modes
+
+MyNoSQL has modes of operation, Peer (Default) and Mirror
+
+### Peer
+
+A Peer, will cache documents requested or written by the local application, it will not keep copies of documents the the local local application has not interacted with
+
+When a MyNoSQL database in peer mode:
+- Writing a new record MyNoSQL will:
+  - write locally
+  - contact a mirror and replicate to that mirror
+- when reading a record MyNoSQL will:
+  - check if the most recent version of the record is available locally
+  - request the most recent version of the record from a mirror if not available locally
+  - return the most recent version of the record
+- periodically poll a mirror to push any local records that are newer then the record version on the mirror
+
+### Mirror
+
+A mirror, will attempt to keep copies of all documents.
+
+When a MyNoSQL database in mirror mode:
+- Receive records from peers and mirrors
+  - write the received record
+- Receive requests for records from peers and mirrors
+  - read the record and return to the requestor
+- Writing a new record MyNoSQL will:
+  - write locally
+  - attempt to contact all mirrors and replicate to those mirrors
+- When reading a record MyNoSQL will:
+	- check if the most recent version of the record is available locally
+	- if not available locally request the most recent version of the record from each mirror until a mirror provides the record requested (This should rarely happen as mirrors should already have received the record when it was written on another mirror, or through periodical polling)
+	- return the most recent version of the record
+- periodically poll all other mirrors to check the versions of records and request updates to any records that are out of date
+
+## Installing
+
+```
+pip install mynosql
+```

@@ -49,7 +49,7 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 
 			message = "Unrecognised request: '{}'".format(parsed_path)
 
-			if (patharr[1].lower() in ["peer"]):
+			if (patharr[1].lower() in ["peer", "doc"]):
 				httpcode = 200
 				message = "OK"
 
@@ -68,6 +68,11 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 
 						saved = db._saveremotedoc(doc)
 						db.debugmsg(5, "saved:", saved)
+
+				if patharr[1].lower() == "doc":
+
+					raise Exception("POST /doc not implimented")
+
 
 
 		except Exception as e:
@@ -163,7 +168,7 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 
 
 class MyNoSQL:
-	version = "0.0.1"
+	version = "0.0.2"
 	debuglvl = 7
 	timeout=600
 
@@ -267,13 +272,17 @@ class MyNoSQL:
 		peers.start()
 
 		while self.dbopen:
-			reg = threading.Thread(target=self._registerself)
-			reg.start()
+			if self.dbopen:
+				reg = threading.Thread(target=self._registerself)
+				reg.start()
 
-			time.sleep(60)
+			for i in range(60):
+				if self.dbopen:
+					time.sleep(1)
 
-			upd = threading.Thread(target=self._peerupdates)
-			upd.start()
+			if self.dbopen:
+				upd = threading.Thread(target=self._peerupdates)
+				upd.start()
 
 
 		self.httpserver.shutdown()
@@ -299,17 +308,32 @@ class MyNoSQL:
 				if dbserverdoc["dbmode"] != "Peer":
 					self._registerpeer(dbserver)
 
+	def _haspeers(self):
+		if "peers" not in self.db:
+			self.debugmsg(7, "Adding peers to self.db")
+			self.db["peers"] = []
+
+		self.debugmsg(9, "self.db[peers]:", len(self.db["peers"]), self.db["peers"])
+		if len(self.db["peers"]) > 0:
+			return True
+
+		return False
 
 	def _peerupdates(self):
-		if "peers" not in self.db:
-			self.db["peers"] = []
-		selfdoc = self.getselfdoc()
-		if selfdoc["dbmode"] == "Peer":
-			mirrorid = random.choice(self.db["peers"])
-			self._getpeerupdates(mirrorid, selfdoc["dbmode"])
-		if selfdoc["dbmode"] == "Mirror":
-			for peer in self.db["peers"]:
-				self._getpeerupdates(peer, selfdoc["dbmode"])
+		if self.dbopen:
+			if "peers" not in self.db:
+				self.debugmsg(5, "Adding peers to self.db")
+				self.db["peers"] = []
+			if self._haspeers():
+				selfdoc = self.getselfdoc()
+				self.debugmsg(9, "selfdoc:", selfdoc)
+				if selfdoc["dbmode"] == "Peer":
+					self.debugmsg(7, "self.db[peers]:", len(self.db["peers"]), self.db["peers"])
+					mirrorid = random.choice(self.db["peers"])
+					self._getpeerupdates(mirrorid, selfdoc["dbmode"])
+				if selfdoc["dbmode"] == "Mirror":
+					for peer in self.db["peers"]:
+						self._getpeerupdates(peer, selfdoc["dbmode"])
 
 	def _getpeerupdates(self, doc_id, mode):
 		self.debugmsg(8, "doc_id:", doc_id)
@@ -340,6 +364,7 @@ class MyNoSQL:
 
 						self.debugmsg(7, "getremote:", getremote)
 						if getremote:
+							self.debugmsg(7, "_getremote url:", peerdoc["dbserver"] + "/Doc/" + peerrev)
 							rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + peerrev)
 							self.debugmsg(7, "rdoc:", rdoc)
 							self._saveremotedoc(rdoc)
@@ -348,19 +373,21 @@ class MyNoSQL:
 	def _updatepeerindex(self, peerurl, index):
 		self.debugmsg(8, "index:", index)
 		indexremote = self._getremote(peerurl + "/Index/" + index)
-		self.debugmsg(8, "index:", index, "indexremote:", indexremote)
+		self.debugmsg(7, "index:", index, "indexremote:", indexremote)
 		indexlocal = self.indexread(index)
 		self.debugmsg(8, "index:", index, "indexlocal:", indexlocal)
 		for item in indexremote:
-			self.debugmsg(8, "item:", item)
+			self.debugmsg(7, "item:", item)
 			if item not in indexlocal.keys():
 				self._indexadd(index, item, indexremote[item])
 			if index == "rev":
 				# compare revisions
 				rdet = self._revdetail(indexremote[item])
+				self.debugmsg(7, "rdet:", rdet)
 				ldet = self._revdetail(indexlocal[item])
+				self.debugmsg(7, "ldet:", ldet)
 				if rdet["number"] > ldet["number"]:
-					self._indexadd(index, indexremote, indexremote[item])
+					self._indexadd(index, item, indexremote[item])
 
 	def _getremote(self, uri):
 		try:
@@ -414,8 +441,11 @@ class MyNoSQL:
 		peerdoc = self._getremote(uri)
 		self.debugmsg(5, "peerdoc: ", peerdoc)
 		if "id" in peerdoc:
+			self.debugmsg(5, "_saveremotedoc(peerdoc): ", peerdoc)
 			self._saveremotedoc(peerdoc)
-		pass
+			if "dbmode" in peerdoc and peerdoc["dbmode"] == "Mirror":
+				self._registerpeer(peerdoc["id"])
+		# pass
 
 	def getselfdoc(self):
 		if self.dbopen:
@@ -437,8 +467,10 @@ class MyNoSQL:
 			if self.doc_id is None:
 				srvdisphost = socket.gethostname()
 				self.selfurl = "http://{}:{}".format(srvdisphost, self.port)
+				self.debugmsg(7, "self.selfurl:", self.selfurl)
 				dbservers = self.indexread("dbserver")
 				self.debugmsg(7, "dbservers:", dbservers)
+
 				if self.selfurl in list(dbservers.values()):
 					# find doc id
 					for dbserver in dbservers:
@@ -447,12 +479,20 @@ class MyNoSQL:
 						if dbservers[dbserver] == self.selfurl:
 							self.doc_id = dbserver
 							self.debugmsg(7, "self.doc_id:", self.doc_id)
-							doc = self.readdoc(self.doc_id)
+
+					doc = self.readdoc(self.doc_id)
+					self.debugmsg(7, "doc:", doc)
+					if doc is None:
+						raise Exception("doc is None.", doc)
+
 				else:
 					# create new server doc
 					doc = {}
 					doc["dbserver"] = self.selfurl
 					doc["altconn"] = []
+
+
+				self.debugmsg(7, "doc:", doc)
 				if "dbmode" not in doc:
 					doc["dbmode"] = "Peer"
 
@@ -516,9 +556,11 @@ class MyNoSQL:
 
 
 	def closedb(self):
+		self.debugmsg(0, "Closing DB:", self.db["dbpath"])
 		self.dbopen = False
 		self.server.join()
 		self.db = {}
+		self.debugmsg(0, "DB Closed")
 
 	def _lockaquire(self, filename):
 		timeout = 60
@@ -631,19 +673,21 @@ class MyNoSQL:
 
 	def _indexadd(self, key, doc_id, value):
 		changed = False
-		# self.debugmsg(9, "key:", key)
+		self.debugmsg(9, "key:", key)
 		if key not in self._indexlist():
 			self.indexadd(key)
-		# self.debugmsg(9, "doc_id:", doc_id)
+		self.debugmsg(9, "doc_id:", doc_id)
+
+		self.debugmsg(7, "doc_id:", doc_id, "	key:", self.db["index"][key], "	index:", self.db["index"])
 		if doc_id not in self.db["index"][key].keys():
 			self.db["index"][key][doc_id] = value
 			changed = True
-		# self.debugmsg(9, "value:", value)
+		self.debugmsg(9, "value:", value)
 		if self.db["index"][key][doc_id] != value:
 			self.db["index"][key][doc_id] = value
 			changed = True
 
-		# self.debugmsg(9, "changed:", changed)
+		self.debugmsg(9, "changed:", changed)
 		if changed:
 			self._saveindex()
 
@@ -747,10 +791,10 @@ class MyNoSQL:
 		doc = None
 		islocal = self._islocal(doc_id)
 		self.debugmsg(8, "doc_id:", doc_id, "islocal:", islocal)
+		t = datetime.datetime.now()
+		if "documents" not in self.db:
+			self.db["documents"] = {}
 		if islocal is not None:
-			t = datetime.datetime.now()
-			if "documents" not in self.db:
-				self.db["documents"] = {}
 			if doc_id not in self.db["documents"]:
 				# need to load the doc from the shard
 				shard_id = self._getshardid(doc_id)
@@ -759,15 +803,39 @@ class MyNoSQL:
 				if shard_id not in self.db["shards"]:
 					self.db["shards"][shard_id] = self._loadshard(shard_id)
 				self.db["documents"][doc_id] = {}
-				self.db["documents"][doc_id]["data"] = self.db["shards"][shard_id][doc_id]
+				if doc_id in self.db["shards"][shard_id]:
+					self.db["documents"][doc_id]["data"] = self.db["shards"][shard_id][doc_id]
+				else:
+					raise Exception("doc_id",doc_id,"not found", doc)
+
 				self.db["documents"][doc_id]["accessed"] = t.timestamp()
 				self.db["documents"][doc_id]["dochash"] = self._dochash(doc)
 				self._freeshard(shard_id)
+
+			if doc_id not in self.db["documents"]:
+				raise Exception("doc_id", doc_id, "not found in", self.db["documents"])
+			if "data" not in self.db["documents"][doc_id]:
+				raise Exception("data not found in", self.db["documents"][doc_id])
 
 			doc = self.db["documents"][doc_id]["data"]
 			self.db["documents"][doc_id]["accessed"] = t.timestamp()
 
 			self._indexdoc(doc)
+		else:
+			if self._haspeers():
+				mirrorid = random.choice(self.db["peers"])
+				peerdoc = self.readdoc(mirrorid)
+				rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + doc_id)
+				self.debugmsg(7, "rdoc:", rdoc)
+				self._saveremotedoc(rdoc)
+
+			if doc_id in self.db["documents"]:
+				t = datetime.datetime.now()
+				doc = self.db["documents"][doc_id]["data"]
+				self.db["documents"][doc_id]["accessed"] = t.timestamp()
+			else:
+				raise Exception("doc", doc_id, "not found")
+
 		return doc
 
 	def _getshardid(self, doc_id):
@@ -785,6 +853,10 @@ class MyNoSQL:
 		return shard_id
 
 	def _islocal(self, doc_id):
+		# self.debugmsg(9, "index:", self.db["index"])
+		# self.debugmsg(9, "index local:", self.db["index"]["local"])
+		if "index" not in self.db:
+			self.db["index"] = {}
 		if "local" not in self.db["index"]:
 			self.db["index"]["local"] = {}
 		# self.debugmsg(9, "index local keys:", self.db["index"]["local"].keys())

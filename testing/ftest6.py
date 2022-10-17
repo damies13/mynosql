@@ -11,6 +11,9 @@ import time
 
 db = MyNoSQL.MyNoSQL()
 db.opendb("mydb6")
+
+# db.debuglvl = 9
+
 # print("db.db: ", db.db)
 print("")
 db.getdbmode()
@@ -18,7 +21,7 @@ db.setdbmode("Mirror")
 
 
 
-for i in range(5):
+for i in range(15):
 	time.sleep(60)
 
 
@@ -29,5 +32,5 @@ print("db.db: ", db.db)
 print("")
 db.closedb()
 print("")
-print("db.db: ", db.db)
-print("")
+# print("db.db: ", db.db)
+# print("")

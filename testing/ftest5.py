@@ -118,6 +118,24 @@ print("")
 #
 
 
+print("")
+dbself = db.getselfdoc()
+print("dbself:", dbself)
+
+print("")
+if dbself["dbserver"] != "http://DavesMBPSG:8800":
+	db.addpeer("http://DavesMBPSG:8800")
+if dbself["dbserver"] != "http://DavesMBPSG:8801":
+	db.addpeer("http://DavesMBPSG:8801")
+
+time.sleep(5)
+
+print("")
+print("")
+print("")
+print("")
+print("")
+
 for i in range(3):
 	myobj = newuser()
 	myobj = db.savedoc(myobj)
@@ -140,18 +158,6 @@ for i in range(3):
 	# 	myobj2 = db.savedoc(myobj2a)
 	# 	print("saved myobj2: ", myobj2)
 	time.sleep(5)
-
-time.sleep(5)
-
-print("")
-dbself = db.getselfdoc()
-print("dbself:", dbself)
-
-print("")
-if dbself["dbserver"] != "http://DavesMBPSG:8800":
-	db.addpeer("http://DavesMBPSG:8800")
-if dbself["dbserver"] != "http://DavesMBPSG:8801":
-	db.addpeer("http://DavesMBPSG:8801")
 
 
 time.sleep(60)
