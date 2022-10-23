@@ -123,10 +123,13 @@ dbself = db.getselfdoc()
 print("dbself:", dbself)
 
 print("")
-if dbself["dbserver"] != "http://DavesMBPSG:8800":
-	db.addpeer("http://DavesMBPSG:8800")
-if dbself["dbserver"] != "http://DavesMBPSG:8801":
-	db.addpeer("http://DavesMBPSG:8801")
+# if dbself["dbserver"] != "http://DavesMBPSG:8800":
+# 	db.addpeer("http://DavesMBPSG:8800")
+# if dbself["dbserver"] != "http://DavesMBPSG:8801":
+# 	db.addpeer("http://DavesMBPSG:8801")
+
+db.addpeer("http://MyNoSQL-M1:8800")
+
 
 time.sleep(5)
 

@@ -7,7 +7,7 @@ import MyNoSQL
 
 import time
 
-
+keeprunning = True
 
 db = MyNoSQL.MyNoSQL()
 db.opendb("mydb6")
@@ -19,11 +19,19 @@ print("")
 db.getdbmode()
 db.setdbmode("Mirror")
 
+# db.addpeer("http://MyNoSQL-M2:8800")
+# db.addpeer("http://MyNoSQL-M1:8800")
 
 
-for i in range(15):
-	time.sleep(60)
 
+# for i in range(15):
+# 	time.sleep(60)
+
+while keeprunning:
+	try:
+		time.sleep(60)
+	except KeyboardInterrupt:
+		keeprunning = False
 
 
 
