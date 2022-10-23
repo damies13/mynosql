@@ -1,5 +1,5 @@
 import random
-from faker import Faker
+# from faker import Faker
 import sys
 
 sys.path.append('../MyNoSQL')
