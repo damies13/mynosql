@@ -21,7 +21,7 @@ While there is no limit to applications that could use MyNoSQL, here are some ex
 
 First import the module and create a database instance
 ```python
-import MyNoSQL
+from MyNoSQL import MyNoSQL
 
 db = MyNoSQL.MyNoSQL()
 db.opendb("YourDatabseName")
@@ -102,5 +102,5 @@ When a MyNoSQL database in mirror mode:
 ## Installing
 
 ```
-pip install mynosql
+pip3 install -U MyNoSQL
 ```

@@ -17,11 +17,12 @@ setuptools.setup(
 	classifiers=[
 		"Development Status :: 3 - Alpha",
 		"Topic :: Database :: Database Engines/Servers",
-		"Programming Language :: Python :: 3.7",
+		"Programming Language :: Python :: 3.8",
 		"License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
 		"Operating System :: OS Independent",
 	],
-	python_requires='>=3.6',
+	# threading.get_native_id() needs python 3.8	https://docs.python.org/3/library/threading.html#threading.get_native_id
+	python_requires='>=3.8',
 	project_urls={
 		'Getting Help': 'https://github.com/damies13/mynosql',
 		'Source': 'https://github.com/damies13/mynosql',
