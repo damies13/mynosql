@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
 	name="MyNoSQL",
-	version="0.0.2.1668560428",
+	version="0.0.2.1668560482",
 	author="damies13",
 	author_email="damies13+mynosql@gmail.com",
 	description="MyNoSQL",
