@@ -21,7 +21,7 @@ While there is no limit to applications that could use MyNoSQL, here are some ex
 
 First import the module and create a database instance
 ```python
-from MyNoSQL import MyNoSQL
+import MyNoSQL
 
 db = MyNoSQL.MyNoSQL()
 db.opendb("YourDatabseName")
