@@ -168,7 +168,7 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 
 
 class MyNoSQL:
-	version = "0.0.2.1668559970"
+	version = "0.0.2.1668560369"
 	debuglvl = 7
 	timeout=600
 
