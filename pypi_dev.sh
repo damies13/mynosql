@@ -25,6 +25,8 @@ if [[ "$currversion" =~ v[0-9]\. ]]; then
 	#	Version Test
 	sed -i '' -e "s/#    Version .*/#    Version ${version}/" $(find . -type f -name "*.py")
 
+	git commit -m "Version ${version}" -a
+
 	rm -R dist/
 	python3 setup*.py sdist bdist_wheel
 
