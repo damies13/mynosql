@@ -316,7 +316,7 @@ class MyNoSQL:
 
 		if doc_id not in self.db["peers"]["sorted"]:
 			# self.db["peers"]["sorted"].append(doc_id)
-			self.db["peers"]["sorted"].append({'id':doc_id,'speed':self.defaultspeed)
+			self.db["peers"]["sorted"].append({'id':doc_id,'speed':self.defaultspeed})
 			self.db["peers"]["speed"][doc_id] = self.defaultspeed
 
 			peerspeed = threading.Thread(target=self._getpeerspeed, args=(doc_id,))
@@ -335,15 +335,15 @@ class MyNoSQL:
 		speed = tend - tstart
 		# self.db["peers"].append({'id':doc_id,'speed':speed)
 		self.db["peers"]["speed"][doc_id] = speed
-		self._sortpeerspeed()
+		self._sortpeerspeeds()
 
 	def _sortpeerspeeds(self):
 		peerssorted = []
-		for doc_id in self.db["peers"]["speed"].keys()
-			peerssorted.append({'id':doc_id,'speed':self.db["peers"]["speed"][doc_id])
+		for doc_id in self.db["peers"]["speed"].keys():
+			peerssorted.append({'id':doc_id,'speed':self.db["peers"]["speed"][doc_id]})
 
 		self.db["peers"]["sorted"] = peerssorted
-		self.db["peers"]["sorted"].sort(key=_sortpeerspeed)
+		self.db["peers"]["sorted"].sort(key=self._sortpeerspeed)
 
 	def _findpeers(self):
 		time.sleep(5)
@@ -457,6 +457,7 @@ class MyNoSQL:
 				ldoc = self.readdoc(item)
 				self.debugmsg(5, "_sendremote url:", peerurl + "/Doc")
 				self._sendremote(peerurl + "/Doc", ldoc)
+				indexremote = self._getremote(peerurl + "/Index/" + index)
 			if index == "rev":
 				# compare revisions
 				rdet = self._revdetail(indexremote[item])
