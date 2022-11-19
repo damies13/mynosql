@@ -303,7 +303,7 @@ class MyNoSQL:
 		self.httpserver.shutdown()
 		self.dbserver.join()
 
-	def _sortpeerspeed(e):
+	def _sortpeerspeed(self, e):
 	  return e['speed']
 
 	def _registerpeer(self, doc_id):
@@ -413,7 +413,7 @@ class MyNoSQL:
 				t = datetime.datetime.now()
 				for peerrev in peerrevs:
 					rdet = self._revdetail(peerrevs[peerrev])
-					self.debugmsg(7, "rdet:", rdet)
+					self.debugmsg(8, "rdet:", rdet)
 					getremote = False
 					if rdet["epoch"] > (t.timestamp() - ONE_YEAR):
 						islocal = self._islocal(peerrev)
@@ -424,46 +424,46 @@ class MyNoSQL:
 							if rdet["number"] > ldet["number"]:
 								getremote = True
 
-						self.debugmsg(7, "getremote:", getremote)
+						self.debugmsg(8, "getremote:", getremote)
 						if getremote:
-							self.debugmsg(7, "_getremote url:", peerdoc["dbserver"] + "/Doc/" + peerrev)
+							self.debugmsg(8, "_getremote url:", peerdoc["dbserver"] + "/Doc/" + peerrev)
 							rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + peerrev)
-							self.debugmsg(7, "rdoc:", rdoc)
+							self.debugmsg(8, "rdoc:", rdoc)
 							self._saveremotedoc(rdoc)
 
 
 	def _updatepeerindex(self, peerurl, index):
 		self.debugmsg(8, "index:", index)
 		indexremote = self._getremote(peerurl + "/Index/" + index)
-		self.debugmsg(7, "index:", index, "indexremote:", indexremote)
+		self.debugmsg(8, "index:", index, "indexremote:", indexremote)
 		indexlocal = self.indexread(index)
 		self.debugmsg(8, "index:", index, "indexlocal:", indexlocal)
 		for item in indexremote:
-			self.debugmsg(7, "item:", item)
+			self.debugmsg(8, "item:", item)
 			if item not in indexlocal.keys():
 				self._indexadd(index, item, indexremote[item])
 			if index == "rev":
 				# compare revisions
 				rdet = self._revdetail(indexremote[item])
-				self.debugmsg(7, "rdet:", rdet)
+				self.debugmsg(8, "rdet:", rdet)
 				ldet = self._revdetail(indexlocal[item])
-				self.debugmsg(7, "ldet:", ldet)
+				self.debugmsg(8, "ldet:", ldet)
 				if rdet["number"] > ldet["number"]:
 					self._indexadd(index, item, indexremote[item])
 
 		for item in indexlocal:
-			self.debugmsg(5, "item:", item)
+			self.debugmsg(8, "item:", item)
 			if item not in indexremote.keys():
 				ldoc = self.readdoc(item)
-				self.debugmsg(5, "_sendremote url:", peerurl + "/Doc")
+				self.debugmsg(8, "_sendremote url:", peerurl + "/Doc")
 				self._sendremote(peerurl + "/Doc", ldoc)
 				indexremote = self._getremote(peerurl + "/Index/" + index)
 			if index == "rev":
 				# compare revisions
 				rdet = self._revdetail(indexremote[item])
-				self.debugmsg(7, "rdet:", rdet)
+				self.debugmsg(8, "rdet:", rdet)
 				ldet = self._revdetail(indexlocal[item])
-				self.debugmsg(7, "ldet:", ldet)
+				self.debugmsg(8, "ldet:", ldet)
 				if ldet["number"] > rdet["number"]:
 					ldoc = self.readdoc(item)
 					self.debugmsg(5, "_sendremote url:", peerurl + "/Doc")
