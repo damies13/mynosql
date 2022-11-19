@@ -809,7 +809,13 @@ class MyNoSQL:
 			self.db["documents"][doc["id"]]["dochash"] = self._dochash(doc)
 			self._savetoshard(doc["id"])
 			self._indexdoc(doc)
+
+			if self.dbopen:
+				upd = threading.Thread(target=self._peerupdates)
+				upd.start()
+
 		return doc
+
 
 	def readdoc(self, doc_id):
 		doc = None
