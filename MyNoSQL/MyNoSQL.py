@@ -53,6 +53,8 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 				httpcode = 200
 				message = "OK"
 
+				db.debugmsg(5, "patharr[1].lower():", patharr[1].lower())
+
 				if patharr[1].lower() == "peer":
 					content_len = int(self.headers.get('Content-Length'))
 					post_body = self.rfile.read(content_len)
@@ -401,8 +403,12 @@ class MyNoSQL:
 				if rdet["number"] > ldet["number"]:
 					self._indexadd(index, item, indexremote[item])
 
-		# for item in indexlocal:
-		# 	self.debugmsg(7, "item:", item)
+		for item in indexlocal:
+			self.debugmsg(5, "item:", item)
+			if item not in indexremote.keys():
+				ldoc = self.readdoc(item)
+				self.debugmsg(5, "_sendremote url:", peerurl + "/Doc")
+				self._sendremote(peerurl + "/Doc", ldoc)
 
 
 	def _getremote(self, uri):
@@ -429,7 +435,9 @@ class MyNoSQL:
 			r = requests.post(uri, json=payload, timeout=self.timeout)
 			self.debugmsg(9, "resp: ", r.status_code, r.text)
 			if (r.status_code != requests.codes.ok):
-				self.debugmsg(9, "r.status_code:", r.status_code, "!=", requests.codes.ok)
+				self.debugmsg(5, "	r.status_code:", r.status_code, "!=", requests.codes.ok)
+				self.debugmsg(5, "	uri: ", uri, "json", payload)
+				self.debugmsg(5, "	resp: ", r.status_code, r.text)
 				return None
 			else:
 				if "{" in r.text or "[" in r.text:
@@ -456,7 +464,7 @@ class MyNoSQL:
 		self.debugmsg(5, "resp: ", resp)
 		peerdoc = self._getremote(uri)
 		self.debugmsg(5, "peerdoc: ", peerdoc)
-		if "id" in peerdoc:
+		if peerdoc is not None and "id" in peerdoc:
 			self.debugmsg(5, "_saveremotedoc(peerdoc): ", peerdoc)
 			self._saveremotedoc(peerdoc)
 			if "dbmode" in peerdoc and peerdoc["dbmode"] == "Mirror":
