@@ -185,7 +185,6 @@ class MyNoSQL:
 	version = "0.0.4"
 	debuglvl = 7
 	timeout=600
-	defaultspeed=999999999
 
 	# dbopen = False
 
@@ -303,31 +302,11 @@ class MyNoSQL:
 		self.httpserver.shutdown()
 		self.dbserver.join()
 
-	def _sortpeerspeed(e):
-	  return e['speed']
-
 	def _registerpeer(self, doc_id):
 		if "peers" not in self.db:
 			self.db["peers"] = []
 		if doc_id not in self.db["peers"]:
-			self.db["peers"].append({'id':doc_id,'speed':self.defaultspeed)
-			peerspeed = threading.Thread(target=self._getpeerspeed, args=(doc_id,))
-			peerspeed.start()
-
-		self.db["peers"].sort(key=_sortpeerspeed)
-
-	def _getpeerspeed(self, doc_id):
-		self.debugmsg(5, "doc_id:", doc_id)
-		peerdoc = self.readdoc(doc_id)
-		self.debugmsg(5, "peerdoc:", peerdoc)
-
-		t = datetime.datetime.now()
-		tstart = t.timestamp()
-		peerdata = self._getremote(peerdoc["dbserver"] + "/peer")
-		t = datetime.datetime.now()
-		tend = t.timestamp()
-		speed = tend - tstart
-		# self.db["peers"].append({'id':doc_id,'speed':speed)
+			self.db["peers"].append(doc_id)
 
 	def _findpeers(self):
 		time.sleep(5)
@@ -354,18 +333,6 @@ class MyNoSQL:
 
 		return False
 
-	def _choosepeer(self):
-		peerid = None
-		if self._haspeers():
-			self.db["peers"].sort(key=_sortpeerspeed)
-			fastest = self.db["peers"][0]
-			if fastest['speed'] == self.defaultspeed:
-				mirror = random.choice(self.db["peers"])
-				peerid = mirror['id']
-			else:
-				peerid = fastest['id']
-		return peerid
-
 	def _peerupdates(self):
 		if self.dbopen:
 			if "peers" not in self.db:
@@ -376,7 +343,7 @@ class MyNoSQL:
 				self.debugmsg(9, "selfdoc:", selfdoc)
 				if selfdoc["dbmode"] == "Peer":
 					self.debugmsg(7, "self.db[peers]:", len(self.db["peers"]), self.db["peers"])
-					mirrorid = self._choosepeer()
+					mirrorid = random.choice(self.db["peers"])
 					self._getpeerupdates(mirrorid, selfdoc["dbmode"])
 				if selfdoc["dbmode"] == "Mirror":
 					for peer in self.db["peers"]:
@@ -896,7 +863,7 @@ class MyNoSQL:
 			self._indexdoc(doc)
 		else:
 			if self._haspeers():
-				mirrorid = self._choosepeer()
+				mirrorid = random.choice(self.db["peers"])
 				peerdoc = self.readdoc(mirrorid)
 				rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + doc_id)
 				self.debugmsg(7, "rdoc:", rdoc)
