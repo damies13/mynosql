@@ -71,7 +71,19 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 
 				if patharr[1].lower() == "doc":
 
-					raise Exception("POST /doc not implimented")
+					content_len = int(self.headers.get('Content-Length'))
+					post_body = self.rfile.read(content_len)
+					doc = json.loads(post_body)
+
+					db.debugmsg(5, "doc:", doc)
+
+					db.debugmsg(5, "db:", db)
+					db.debugmsg(5, "db.doc_id:", db.doc_id)
+
+					if "id" in doc:
+
+						saved = db._saveremotedoc(doc)
+						db.debugmsg(5, "saved:", saved)
 
 
 
@@ -388,6 +400,10 @@ class MyNoSQL:
 				self.debugmsg(7, "ldet:", ldet)
 				if rdet["number"] > ldet["number"]:
 					self._indexadd(index, item, indexremote[item])
+
+		# for item in indexlocal:
+		# 	self.debugmsg(7, "item:", item)
+
 
 	def _getremote(self, uri):
 		try:
