@@ -130,6 +130,10 @@ print("")
 
 db.addpeer("http://MyNoSQL-M1:8800")
 
+print("")
+print("")
+print("")
+print("Havin a wee rest")
 
 time.sleep(5)
 
@@ -138,16 +142,30 @@ print("")
 print("")
 print("")
 print("")
+print("Creating New Docs")
 
 for i in range(3):
+	print("Creating New Doc")
 	myobj = newuser()
 	myobj = db.savedoc(myobj)
 	print("myobj: ", myobj)
 	time.sleep(5)
 #
 #
+print("")
+print("")
+print("")
+print("Hanging around a bit")
+time.sleep(120)
+
+print("")
+print("")
+print("")
+print("Reading Existing Docs")
+
 rev = db.indexread("rev")
 for i in range(3):
+	print("Reading Existing Doc")
 	print("")
 	id = random.choice(list(rev.keys()))
 	print("id: ", id)
@@ -163,7 +181,12 @@ for i in range(3):
 	time.sleep(5)
 
 
-time.sleep(60)
+print("")
+print("")
+print("")
+print("Hanging around a bit")
+time.sleep(120)
+print("All over red rover")
 
 
 
