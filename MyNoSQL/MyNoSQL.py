@@ -409,6 +409,16 @@ class MyNoSQL:
 				ldoc = self.readdoc(item)
 				self.debugmsg(5, "_sendremote url:", peerurl + "/Doc")
 				self._sendremote(peerurl + "/Doc", ldoc)
+			if index == "rev":
+				# compare revisions
+				rdet = self._revdetail(indexremote[item])
+				self.debugmsg(7, "rdet:", rdet)
+				ldet = self._revdetail(indexlocal[item])
+				self.debugmsg(7, "ldet:", ldet)
+				if ldet["number"] > rdet["number"]:
+					ldoc = self.readdoc(item)
+					self.debugmsg(5, "_sendremote url:", peerurl + "/Doc")
+					self._sendremote(peerurl + "/Doc", ldoc)
 
 
 	def _getremote(self, uri):
