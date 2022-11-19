@@ -185,6 +185,7 @@ class MyNoSQL:
 	version = "0.0.4"
 	debuglvl = 7
 	timeout=600
+	defaultspeed=999999999
 
 	# dbopen = False
 
@@ -302,11 +303,47 @@ class MyNoSQL:
 		self.httpserver.shutdown()
 		self.dbserver.join()
 
+	def _sortpeerspeed(e):
+	  return e['speed']
+
 	def _registerpeer(self, doc_id):
 		if "peers" not in self.db:
-			self.db["peers"] = []
-		if doc_id not in self.db["peers"]:
-			self.db["peers"].append(doc_id)
+			self.db["peers"] = {}
+		if "sorted" not in self.db["peers"]:
+			self.db["peers"]["sorted"] = []
+		if "speed" not in self.db["peers"]:
+			self.db["peers"]["speed"] = {}
+
+		if doc_id not in self.db["peers"]["sorted"]:
+			# self.db["peers"]["sorted"].append(doc_id)
+			self.db["peers"]["sorted"].append({'id':doc_id,'speed':self.defaultspeed)
+			self.db["peers"]["speed"][doc_id] = self.defaultspeed
+
+			peerspeed = threading.Thread(target=self._getpeerspeed, args=(doc_id,))
+			peerspeed.start()
+
+	def _getpeerspeed(self, doc_id):
+		self.debugmsg(5, "doc_id:", doc_id)
+		peerdoc = self.readdoc(doc_id)
+		self.debugmsg(5, "peerdoc:", peerdoc)
+
+		t = datetime.datetime.now()
+		tstart = t.timestamp()
+		peerdata = self._getremote(peerdoc["dbserver"] + "/peer")
+		t = datetime.datetime.now()
+		tend = t.timestamp()
+		speed = tend - tstart
+		# self.db["peers"].append({'id':doc_id,'speed':speed)
+		self.db["peers"]["speed"][doc_id] = speed
+		self._sortpeerspeed()
+
+	def _sortpeerspeeds(self):
+		peerssorted = []
+		for doc_id in self.db["peers"]["speed"].keys()
+			peerssorted.append({'id':doc_id,'speed':self.db["peers"]["speed"][doc_id])
+
+		self.db["peers"]["sorted"] = peerssorted
+		self.db["peers"]["sorted"].sort(key=_sortpeerspeed)
 
 	def _findpeers(self):
 		time.sleep(5)
@@ -324,30 +361,40 @@ class MyNoSQL:
 
 	def _haspeers(self):
 		if "peers" not in self.db:
-			self.debugmsg(7, "Adding peers to self.db")
-			self.db["peers"] = []
+			return False
+		if "sorted" not in self.db["peers"]:
+			return False
 
-		self.debugmsg(9, "self.db[peers]:", len(self.db["peers"]), self.db["peers"])
-		if len(self.db["peers"]) > 0:
+		self.debugmsg(9, "self.db[peers]:", len(self.db["peers"]["sorted"]), self.db["peers"]["sorted"])
+		if len(self.db["peers"]["sorted"]) > 0:
 			return True
 
 		return False
 
+	def _choosepeer(self):
+		peerid = None
+		if self._haspeers():
+			self._sortpeerspeeds()
+			fastest = self.db["peers"]["sorted"][0]
+			if fastest['speed'] == self.defaultspeed:
+				mirror = random.choice(self.db["peers"]["sorted"])
+				peerid = mirror['id']
+			else:
+				peerid = fastest['id']
+		return peerid
+
 	def _peerupdates(self):
 		if self.dbopen:
-			if "peers" not in self.db:
-				self.debugmsg(5, "Adding peers to self.db")
-				self.db["peers"] = []
 			if self._haspeers():
 				selfdoc = self.getselfdoc()
 				self.debugmsg(9, "selfdoc:", selfdoc)
 				if selfdoc["dbmode"] == "Peer":
-					self.debugmsg(7, "self.db[peers]:", len(self.db["peers"]), self.db["peers"])
-					mirrorid = random.choice(self.db["peers"])
+					mirrorid = self._choosepeer()
 					self._getpeerupdates(mirrorid, selfdoc["dbmode"])
-				if selfdoc["dbmode"] == "Mirror":
-					for peer in self.db["peers"]:
-						self._getpeerupdates(peer, selfdoc["dbmode"])
+				# if selfdoc["dbmode"] == "Mirror":
+				if selfdoc["dbmode"] != "Peer":
+					for peer in self.db["peers"]["sorted"]:
+						self._getpeerupdates(peer['id'], selfdoc["dbmode"])
 
 	def _getpeerupdates(self, doc_id, mode):
 		self.debugmsg(8, "doc_id:", doc_id)
@@ -358,7 +405,8 @@ class MyNoSQL:
 				self.debugmsg(8, "peerindexes:", peerindexes)
 				for index in peerindexes:
 					self._updatepeerindex(peerdoc["dbserver"], index)
-		if mode == "Mirror":
+		# if mode == "Mirror":
+		if mode != "Peer":
 			peerrevs = self._getremote(peerdoc["dbserver"] + "/Index/rev")
 			self.debugmsg(8, "peerrevs:", peerrevs)
 			if peerrevs is not None:
@@ -863,7 +911,7 @@ class MyNoSQL:
 			self._indexdoc(doc)
 		else:
 			if self._haspeers():
-				mirrorid = random.choice(self.db["peers"])
+				mirrorid = self._choosepeer()
 				peerdoc = self.readdoc(mirrorid)
 				rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + doc_id)
 				self.debugmsg(7, "rdoc:", rdoc)
