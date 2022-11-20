@@ -337,6 +337,11 @@ class MyNoSQL:
 		self.db["peers"]["speed"][doc_id] = speed
 		self._sortpeerspeeds()
 
+	def _getallpeerspeeds(self):
+		for peer in self.db["peers"]["sorted"]:
+			peerspeed = threading.Thread(target=self._getpeerspeed, args=(peer['id'],))
+			peerspeed.start()
+
 	def _sortpeerspeeds(self):
 		peerssorted = []
 		for doc_id in self.db["peers"]["speed"].keys():
@@ -386,7 +391,7 @@ class MyNoSQL:
 	def _peerupdates(self):
 		if self.dbopen:
 			if self._haspeers():
-				peerspeed = threading.Thread(target=self._getpeerspeed, args=(doc_id,))
+				peerspeed = threading.Thread(target=self._getallpeerspeeds)
 				peerspeed.start()
 
 				selfdoc = self.getselfdoc()
@@ -672,8 +677,11 @@ class MyNoSQL:
 	def _lockrelease(self, filename):
 		lockfile = "{}.lock".format(filename)
 		if os.path.isfile(lockfile):
-			os.remove(lockfile)
-			self.debugmsg(9, "lock released on", filename)
+			try:
+				os.remove(lockfile)
+				self.debugmsg(9, "lock released for", filename)
+			except:
+				self.debugmsg(9, "lock already released for", filename)
 
 	def _saveindex(self):
 		if self._lockaquire(self.index):
