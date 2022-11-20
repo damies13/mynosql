@@ -145,6 +145,7 @@ print("")
 print("Creating New Docs")
 
 for i in range(3):
+	print("")
 	print("Creating New Doc")
 	myobj = newuser()
 	myobj = db.savedoc(myobj)
@@ -165,8 +166,8 @@ print("Reading Existing Docs")
 
 rev = db.indexread("rev")
 for i in range(3):
-	print("Reading Existing Doc")
 	print("")
+	print("Reading Existing Doc")
 	id = random.choice(list(rev.keys()))
 	print("id: ", id)
 	myobj2 = db.readdoc(id)
