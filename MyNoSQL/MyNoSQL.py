@@ -386,6 +386,9 @@ class MyNoSQL:
 	def _peerupdates(self):
 		if self.dbopen:
 			if self._haspeers():
+				peerspeed = threading.Thread(target=self._getpeerspeed, args=(doc_id,))
+				peerspeed.start()
+
 				selfdoc = self.getselfdoc()
 				self.debugmsg(9, "selfdoc:", selfdoc)
 				if selfdoc["dbmode"] == "Peer":
@@ -404,7 +407,7 @@ class MyNoSQL:
 			if peerindexes is not None:
 				self.debugmsg(8, "peerindexes:", peerindexes)
 				for index in peerindexes:
-					self._updatepeerindex(peerdoc["dbserver"], index)
+					self._updatepeerindex(peerdoc["dbserver"], peerdoc["dbmode"], index)
 		# if mode == "Mirror":
 		if mode != "Peer":
 			peerrevs = self._getremote(peerdoc["dbserver"] + "/Index/rev")
@@ -432,7 +435,7 @@ class MyNoSQL:
 							self._saveremotedoc(rdoc)
 
 
-	def _updatepeerindex(self, peerurl, index):
+	def _updatepeerindex(self, peerurl, mode, index):
 		self.debugmsg(8, "index:", index)
 		indexremote = self._getremote(peerurl + "/Index/" + index)
 		self.debugmsg(8, "index:", index, "indexremote:", indexremote)
@@ -442,6 +445,7 @@ class MyNoSQL:
 			self.debugmsg(8, "item:", item)
 			if item not in indexlocal.keys():
 				self._indexadd(index, item, indexremote[item])
+				indexlocal = self.indexread(index)
 			if index == "rev":
 				# compare revisions
 				rdet = self._revdetail(indexremote[item])
@@ -451,23 +455,26 @@ class MyNoSQL:
 				if rdet["number"] > ldet["number"]:
 					self._indexadd(index, item, indexremote[item])
 
-		for item in indexlocal:
-			self.debugmsg(8, "item:", item)
-			if item not in indexremote.keys():
-				ldoc = self.readdoc(item)
-				self.debugmsg(8, "_sendremote url:", peerurl + "/Doc")
-				self._sendremote(peerurl + "/Doc", ldoc)
-				indexremote = self._getremote(peerurl + "/Index/" + index)
-			if index == "rev":
-				# compare revisions
-				rdet = self._revdetail(indexremote[item])
-				self.debugmsg(8, "rdet:", rdet)
-				ldet = self._revdetail(indexlocal[item])
-				self.debugmsg(8, "ldet:", ldet)
-				if ldet["number"] > rdet["number"]:
+		if mode != "Peer":
+			indexlocal = self.indexread(index)
+			indexremote = self._getremote(peerurl + "/Index/" + index)
+			for item in indexlocal:
+				self.debugmsg(8, "item:", item)
+				if item not in indexremote.keys():
 					ldoc = self.readdoc(item)
-					self.debugmsg(5, "_sendremote url:", peerurl + "/Doc")
+					self.debugmsg(8, "_sendremote url:", peerurl + "/Doc")
 					self._sendremote(peerurl + "/Doc", ldoc)
+					indexremote = self._getremote(peerurl + "/Index/" + index)
+				if index == "rev":
+					# compare revisions
+					rdet = self._revdetail(indexremote[item])
+					self.debugmsg(8, "rdet:", rdet)
+					ldet = self._revdetail(indexlocal[item])
+					self.debugmsg(8, "ldet:", ldet)
+					if ldet["number"] > rdet["number"]:
+						ldoc = self.readdoc(item)
+						self.debugmsg(5, "_sendremote url:", peerurl + "/Doc")
+						self._sendremote(peerurl + "/Doc", ldoc)
 
 
 	def _getremote(self, uri):
