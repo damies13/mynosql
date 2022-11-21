@@ -11,7 +11,7 @@ import time
 db = MyNoSQL.MyNoSQL()
 db.opendb("mydb7")
 # print("db.db: ", db.db)
-db.debuglvl = 7
+db.debuglvl = 5
 
 print("")
 dbself = db.getselfdoc()

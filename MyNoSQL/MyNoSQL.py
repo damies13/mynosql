@@ -1,6 +1,7 @@
 import uuid
 import json
 import lzma
+import gzip
 import os
 import datetime
 import time
@@ -36,16 +37,18 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 
 	def do_POST(self):
 
-		print("")
-		print("--------------- <do_POST> ---------------")
+		debuglvl = 5
+
+		db.debugmsg(debuglvl, "")
+		db.debugmsg(debuglvl, "--------------- <do_POST> ---------------")
 		threadstart = time.time()
 		# default result
 		httpcode = 404
 		try:
 			parsed_path = urllib.parse.urlparse(self.path)
-			db.debugmsg(5, "parsed_path:", parsed_path)
+			db.debugmsg(debuglvl, "parsed_path:", parsed_path)
 			patharr = parsed_path.path.split("/")
-			db.debugmsg(5, "patharr:", patharr)
+			db.debugmsg(debuglvl, "patharr:", patharr)
 
 			message = "Unrecognised request: '{}'".format(parsed_path)
 
@@ -53,39 +56,54 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 				httpcode = 200
 				message = "OK"
 
-				db.debugmsg(5, "patharr[1].lower():", patharr[1].lower())
+				db.debugmsg(debuglvl, "patharr[1].lower():", patharr[1].lower())
+				db.debugmsg(debuglvl, "self.headers():", self.headers())
+
+				content_len = int(self.headers.get('Content-Length'))
+				post_body = self.rfile.read(content_len)
+				# content-encoding: gzip
+				if self.headers.index("Content-Encoding")>0:
+					contentencoding = self.headers.get("Content-Encoding")
+					db.debugmsg(debuglvl, "contentencoding:", contentencoding)
+					if contentencoding == "lzma":
+						post_body = lzma.decompress(post_body)
+					if contentencoding == "gzip":
+						post_body = gzip.decompress(post_body)
 
 				if patharr[1].lower() == "peer":
-					content_len = int(self.headers.get('Content-Length'))
-					post_body = self.rfile.read(content_len)
+					# content_len = int(self.headers.get('Content-Length'))
+					# post_body = self.rfile.read(content_len)
+					# lzma.compress(data_in)	lzma.decompress(data_in)
+					# if contentencoding.lower() == "lzma":
+					# 	message = lzma.compress(message)
 					doc = json.loads(post_body)
 
-					db.debugmsg(5, "doc:", doc)
+					db.debugmsg(debuglvl, "doc:", doc)
 
-					db.debugmsg(5, "db:", db)
-					db.debugmsg(5, "db.doc_id:", db.doc_id)
+					db.debugmsg(debuglvl, "db:", db)
+					db.debugmsg(debuglvl, "db.doc_id:", db.doc_id)
 
 					if "id" in doc:
 						db._registerpeer(doc["id"])
 
 						saved = db._saveremotedoc(doc)
-						db.debugmsg(5, "saved:", saved)
+						db.debugmsg(debuglvl, "saved:", saved)
 
 				if patharr[1].lower() == "doc":
 
-					content_len = int(self.headers.get('Content-Length'))
-					post_body = self.rfile.read(content_len)
+					# content_len = int(self.headers.get('Content-Length'))
+					# post_body = self.rfile.read(content_len)
 					doc = json.loads(post_body)
 
-					db.debugmsg(5, "doc:", doc)
+					db.debugmsg(debuglvl, "doc:", doc)
 
-					db.debugmsg(5, "db:", db)
-					db.debugmsg(5, "db.doc_id:", db.doc_id)
+					db.debugmsg(debuglvl, "db:", db)
+					db.debugmsg(debuglvl, "db.doc_id:", db.doc_id)
 
 					if "id" in doc:
 
 						saved = db._saveremotedoc(doc)
-						db.debugmsg(5, "saved:", saved)
+						db.debugmsg(debuglvl, "saved:", saved)
 
 
 
@@ -94,36 +112,61 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 			httpcode = 500
 			message = str(e)
 
-		db.debugmsg(5, "httpcode:", httpcode, "	message:", message)
+		db.debugmsg(debuglvl, "httpcode:", httpcode, "	message:", message)
+
 		self.send_response(httpcode)
+		# content-encoding: gzip
+		if db.contentencoding != None:
+			self.send_header("Content-Encoding", db.contentencoding)
+			# lzma.compress(data_in)	lzma.decompress(data_in)
+			if db.contentencoding.lower() == "lzma":
+				smessage = bytearray(json.dumps(message).encode("utf8"))
+				message = lzma.compress(smessage)
+			if db.contentencoding.lower() == "gzip":
+				smessage = bytearray(json.dumps(message).encode("utf8"))
+				message = gzip.compress(smessage, compresslevel=9)
+
+			self.send_header("Content-Length", len(message))
+
+
 		self.end_headers()
-		self.wfile.write(bytes(message,"utf-8"))
+		if db.contentencoding != None:
+			db.debugmsg(debuglvl, "message:", message)
+			self.wfile.write(message)
+		else:
+			self.wfile.write(bytes(message,"utf-8"))
 		threadend = time.time()
 		# base.debugmsg(5, parsed_path.path, "	threadstart:", "%.3f" % threadstart, "threadend:", "%.3f" % threadend, "Time Taken:", "%.3f" % (threadend-threadstart))
-		db.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
-		print("--------------- </do_POST> ---------------")
-		print("")
+		db.debugmsg(debuglvl, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
+		db.debugmsg(debuglvl, "--------------- </do_POST> ---------------")
+		db.debugmsg(debuglvl, "")
 		return
 
 	def do_GET(self):
 
-		print("")
-		print("--------------- <do_GET> ---------------")
+		debuglvl = 5
+
+
+		db.debugmsg(debuglvl, "")
+		db.debugmsg(debuglvl, "--------------- <do_GET> ---------------")
 		threadstart = time.time()
 		httpcode = 404
 		message = "Not Found"
 		try:
 			parsed_path = urllib.parse.urlparse(self.path)
-			db.debugmsg(5, "parsed_path:", parsed_path)
+			db.debugmsg(debuglvl, "parsed_path:", parsed_path)
 			patharr = parsed_path.path.split("/")
-			db.debugmsg(5, "patharr:", patharr)
+			db.debugmsg(debuglvl, "patharr:", patharr)
 			if (patharr[1].lower() in ["peer", "index", "doc"]):
+
+				db.debugmsg(debuglvl, "self.headers():", self.headers)
+
 				httpcode = 200
 				message = "OK"
 				if patharr[1].lower() == "peer":
-					db.debugmsg(5, "db:", db)
+					db.debugmsg(debuglvl, "db:", db)
 					doc = db.getselfdoc()
-					db.debugmsg(5, "doc:", doc)
+					db.debugmsg(debuglvl, "doc:", doc)
 					# message = json.dumps(doc).encode("utf8")
 					message = json.dumps(doc)
 
@@ -157,14 +200,34 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 			db.debugmsg(5, "e:", e)
 			httpcode = 500
 			message = str(e)
+
 		self.send_response(httpcode)
+		# content-encoding: gzip
+		if db.contentencoding != None:
+			self.send_header("Content-Encoding", db.contentencoding)
+			# lzma.compress(data_in)	lzma.decompress(data_in)
+			if db.contentencoding.lower() == "lzma":
+				smessage = bytearray(json.dumps(message).encode("utf8"))
+				message = lzma.compress(smessage)
+			if db.contentencoding.lower() == "gzip":
+				smessage = bytearray(json.dumps(message).encode("utf8"))
+				message = gzip.compress(smessage, compresslevel=9)
+
+			self.send_header("Content-Length", len(message))
+
+
+
 		self.end_headers()
-		self.wfile.write(bytes(message,"utf-8"))
+		if db.contentencoding != None:
+			db.debugmsg(debuglvl, "message:", message)
+			self.wfile.write(message)
+		else:
+			self.wfile.write(bytes(message,"utf-8"))
 		threadend = time.time()
 		# base.debugmsg(5, parsed_path.path, "	threadstart:", "%.3f" % threadstart, "threadend:", "%.3f" % threadend, "Time Taken:", "%.3f" % (threadend-threadstart))
-		db.debugmsg(5, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
-		print("--------------- </do_GET> ---------------")
-		print("")
+		db.debugmsg(debuglvl, "%.3f" % (threadend-threadstart), "seconds for ", parsed_path.path)
+		db.debugmsg(debuglvl, "--------------- </do_GET> ---------------")
+		db.debugmsg(debuglvl, "")
 		return
 
 	def handle_http(self):
@@ -183,9 +246,15 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 
 class MyNoSQL:
 	version = "0.0.5"
-	debuglvl = 7
+	debuglvl = 5
 	timeout=600
 	defaultspeed=999999999
+
+	# content-encoding: gzip
+	# contentencoding = "lzma"
+	# contentencoding = "gzip"
+	contentencoding = None
+
 
 	# dbopen = False
 
@@ -405,39 +474,49 @@ class MyNoSQL:
 						self._getpeerupdates(peer['id'], selfdoc["dbmode"])
 
 	def _getpeerupdates(self, doc_id, mode):
-		self.debugmsg(8, "doc_id:", doc_id)
-		peerdoc = self.readdoc(doc_id)
-		if "dbserver" in peerdoc:
-			peerindexes = self._getremote(peerdoc["dbserver"] + "/Index")
-			if peerindexes is not None:
-				self.debugmsg(8, "peerindexes:", peerindexes)
-				for index in peerindexes:
-					self._updatepeerindex(peerdoc["dbserver"], peerdoc["dbmode"], index)
-		# if mode == "Mirror":
-		if mode != "Peer":
-			peerrevs = self._getremote(peerdoc["dbserver"] + "/Index/rev")
-			self.debugmsg(8, "peerrevs:", peerrevs)
-			if peerrevs is not None:
-				t = datetime.datetime.now()
-				for peerrev in peerrevs:
-					rdet = self._revdetail(peerrevs[peerrev])
-					self.debugmsg(8, "rdet:", rdet)
-					getremote = False
-					if rdet["epoch"] > (t.timestamp() - ONE_YEAR):
-						islocal = self._islocal(peerrev)
-						if islocal is None:
-							getremote = True
-						else:
-							ldet = self._revdetail(islocal)
-							if rdet["number"] > ldet["number"]:
-								getremote = True
+		doupdate = True
+		debuglvl = 8
+		self.debugmsg(debuglvl, "doc_id:", doc_id, "	self.doc_id:", self.doc_id)
+		if doc_id != self.doc_id:
+			peerdoc = self.readdoc(doc_id)
+			self.debugmsg(debuglvl, "peerdoc[dbserver]:", peerdoc["dbserver"], "	self.selfurl:", self.selfurl)
+			if peerdoc["dbserver"] == self.selfurl:
+				doupdate = False
+		else:
+			doupdate = False
 
-						self.debugmsg(8, "getremote:", getremote)
-						if getremote:
-							self.debugmsg(8, "_getremote url:", peerdoc["dbserver"] + "/Doc/" + peerrev)
-							rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + peerrev)
-							self.debugmsg(8, "rdoc:", rdoc)
-							self._saveremotedoc(rdoc)
+		if doupdate:
+			if "dbserver" in peerdoc:
+				peerindexes = self._getremote(peerdoc["dbserver"] + "/Index")
+				if peerindexes is not None:
+					self.debugmsg(debuglvl, "peerindexes:", peerindexes)
+					for index in peerindexes:
+						self._updatepeerindex(peerdoc["dbserver"], peerdoc["dbmode"], index)
+			# if mode == "Mirror":
+			if mode != "Peer":
+				peerrevs = self._getremote(peerdoc["dbserver"] + "/Index/rev")
+				self.debugmsg(debuglvl, "peerrevs:", peerrevs)
+				if peerrevs is not None:
+					t = datetime.datetime.now()
+					for peerrev in peerrevs:
+						rdet = self._revdetail(peerrevs[peerrev])
+						self.debugmsg(debuglvl, "rdet:", rdet)
+						getremote = False
+						if rdet["epoch"] > (t.timestamp() - ONE_YEAR):
+							islocal = self._islocal(peerrev)
+							if islocal is None:
+								getremote = True
+							else:
+								ldet = self._revdetail(islocal)
+								if rdet["number"] > ldet["number"]:
+									getremote = True
+
+							self.debugmsg(debuglvl, "getremote:", getremote)
+							if getremote:
+								self.debugmsg(debuglvl, "_getremote url:", peerdoc["dbserver"] + "/Doc/" + peerrev)
+								rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + peerrev)
+								self.debugmsg(debuglvl, "rdoc:", rdoc)
+								self._saveremotedoc(rdoc)
 
 
 	def _updatepeerindex(self, peerurl, mode, index):
@@ -483,22 +562,55 @@ class MyNoSQL:
 
 
 	def _getremote(self, uri):
+		debuglvl = 4
 		try:
-			r = requests.get(uri, timeout=self.timeout)
-			self.debugmsg(9, "resp: ", r.status_code, "r.text:", r.text)
+			self.debugmsg(debuglvl, "uri: ", uri)
+			r = requests.get(uri, timeout=self.timeout, stream=True)
+			# r = requests.get(uri, timeout=self.timeout)
+			self.debugmsg(debuglvl, "r: ", r)
+			self.debugmsg(debuglvl, "resp: ", r.status_code, "r.text:", r.text)
+			self.debugmsg(debuglvl, "r.headers: ", r.headers)
+
 			if (r.status_code != requests.codes.ok):
-				self.debugmsg(9, "r.status_code:", r.status_code, "!=", requests.codes.ok)
+				self.debugmsg(debuglvl, "r.status_code:", r.status_code, "!=", requests.codes.ok)
 				return None
 			else:
-				if "{" in r.text or "[" in r.text:
-					jsonresp = json.loads(r.text)
-					self.debugmsg(9, "jsonresp: ", jsonresp)
+				self.debugmsg(debuglvl, "r.headers: ", r.headers)
+				bodytxt = r.text
+				# self.debugmsg(debuglvl, "r.text: ", r.text)
+				# content-encoding: gzip
+				# contentencoding = "lzma"
+				cl = 0
+				# content-length: 1016
+				if "Content-Length" in r.headers:
+					cl = r.headers["Content-Length"]
+					# self.debugmsg(debuglvl, "cl: ", cl)
+				if "Content-Encoding" in r.headers:
+
+					# r.raw.read(10)
+					self.debugmsg(debuglvl, "cl: ", cl)
+					self.debugmsg(debuglvl, "r.raw: ", r.raw)
+					# bodyraw = r.raw.read(cl)
+					# bodyraw = r.raw.read(10)
+					bodyraw = r.content
+					self.debugmsg(debuglvl, "bodyraw: ", bodyraw)
+
+					if r.headers["Content-Encoding"].lower() == "lzma":
+						# bbodytxt = bytes(bodytxt, "utf-8")
+						# bbodytxt = bodytxt.encode()
+						bodytxt = lzma.decompress(bodyraw)
+					# if r.headers["Content-Encoding"].lower() == "gzip":
+						# bodytxt = gzip.decompress(bodytxt)
+
+				if "{" in bodytxt or "[" in bodytxt:
+					jsonresp = json.loads(bodytxt)
+					self.debugmsg(debuglvl, "jsonresp: ", jsonresp)
 					return jsonresp
 				else:
-					return r.text
+					return bodytxt
 
 		except Exception as e:
-			self.debugmsg(8, "Exception:", e)
+			self.debugmsg(debuglvl, "Exception:", e)
 			return None
 
 	def _sendremote(self, uri, payload):
