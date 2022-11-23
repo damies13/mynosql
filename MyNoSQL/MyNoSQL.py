@@ -255,7 +255,6 @@ class MyNoSQL:
 	# contentencoding = "gzip"
 	contentencoding = None
 
-
 	# dbopen = False
 
 	def __init__(self):
