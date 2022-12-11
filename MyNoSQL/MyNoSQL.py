@@ -31,6 +31,14 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 	# def __init__(self):
 	# 	self.logger = Logger()
 
+	def do_OPTIONS(self):
+		self.send_response(200, "ok")
+		self.send_header('Access-Control-Allow-Origin', '*')
+		self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+		self.send_header("Access-Control-Allow-Headers", "X-Requested-With")
+		self.send_header("Access-Control-Allow-Headers", "Content-Type")
+		self.end_headers()
+
 	def do_HEAD(self):
 		return
 
@@ -158,6 +166,8 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 			httpcode = 500
 			message = str(e)
 		self.send_response(httpcode)
+		# // Access-Control-Allow-Origin: *
+		self.send_header("Access-Control-Allow-Origin", "*")
 		self.end_headers()
 		self.wfile.write(bytes(message,"utf-8"))
 		threadend = time.time()
