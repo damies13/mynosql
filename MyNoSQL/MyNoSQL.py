@@ -125,9 +125,416 @@ class MyNoSQLServer(BaseHTTPRequestHandler):
 			db.debugmsg(5, "parsed_path:", parsed_path)
 			patharr = parsed_path.path.split("/")
 			db.debugmsg(5, "patharr:", patharr)
-			if (patharr[1].lower() in ["peer", "index", "doc"]):
+			if (patharr[1].lower() in ["peer", "index", "doc", "admin"]):
 				httpcode = 200
 				message = "OK"
+
+				if patharr[1].lower() == "admin":
+					db.debugmsg(5, "db:", db)
+					if db.admingui:
+						# return gui html
+						message = """
+	<html>
+	<head>
+		<script src="https://unpkg.com/jquery@latest/dist/jquery.min.js"></script>
+		<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+		<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+		<script src="https://unpkg.com/papaparse@latest/papaparse.min.js"></script>
+
+		<script>
+			function do_connect()
+			{
+				// let hostname = document.forms["frm_connect"]["ipt_hostname"].value;
+				// let port = document.forms["frm_connect"]["ipt_port"].value;
+				let hostname= document.getElementById("ipt_hostname").value;
+				let port= document.getElementById("ipt_port").value;
+				// console.log(hostname + ":" + port);
+				// msgbar
+				// document.getElementById("msgbar").innerHTML = "Connecting to " + hostname + ":" + port;
+				$("#msgbar").html("Connecting to " + hostname + ":" + port);
+
+				// Access-Control-Allow-Origin: *
+				// http://localhost:8800/peer
+				let uri= "http://" + hostname + ":" + port + "/peer";
+				$.ajax({url: uri, success: function(result){
+					// $("#msgbar").html(result);
+					// document.getElementById("msgbar").innerHTML = "Connecting to " + hostname + ":" + port;
+					obj = JSON.parse(result);
+					$("#msgbar").html("Connected to : " + obj["dbserver"]);
+					$("#connect").addClass("hidden");
+					// emptymain
+					$("#emptymain").addClass("hidden");
+					$("#main").removeClass("hidden");
+				}});
+			}
+
+			function switch_toolbar()
+			{
+				let hostname= document.getElementById("ipt_hostname").value;
+				let port= document.getElementById("ipt_port").value;
+
+				var x = document.getElementById("sel_toolbar").value;
+				$("#msgbar").html("You selected: " + x);
+				$(".frm_tb").addClass("hidden");
+				$("#frm_"+x).removeClass("hidden");
+
+				if (x == "index"){
+					let uri= "http://" + hostname + ":" + port + "/index";
+					$.ajax({url: uri, success: function(result){
+
+						obj = JSON.parse(result);
+
+						let optlst = ""
+						$.each(obj, function( k, v ) {
+							optlst += "<option value='"+v+"'>"+v+"</option>";
+						});
+						$("#indexes").html(optlst);
+
+						// let html = json_2_html(result);
+						// $("#workarea").html(html);
+						$("#msgbar").html("Index list : " + obj);
+					}});
+				}
+
+			}
+
+			function new_doc()
+			{
+				if (!(crypto.randomUUID instanceof Function)) {
+					crypto.randomUUID = function uuidv4() {
+						return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+							(c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+						);
+					}
+				}
+				//This polyfill was originally shared on https://stackoverflow.com/a/2117523
+
+				let uuid = crypto.randomUUID();
+				console.log(uuid);
+
+				let jsondata = {"id":uuid};
+
+				let html = "";
+				html += "<button class='right' onclick='show_doc(\\"\\")'>Cancel</button>";
+				html += "<button class='right' onclick='save_doc(\\""+uuid+"\\")'>Save</button>";
+				html += "<textarea id='docedit' class='fill'></textarea>";
+				$("#workarea").html(html);
+				$("#edit_docid").value = "";
+
+				$("#docedit").text(JSON.stringify(jsondata,null,'\t'));
+
+				$("#msgbar").html("New Document : " + uuid);
+
+			}
+
+			function save_doc(docid)
+			{
+				console.log( "save_doc: " + docid);
+
+				let hostname= document.getElementById("ipt_hostname").value;
+				let port= document.getElementById("ipt_port").value;
+
+				let origin= "http://" + hostname + ":" + port + "";
+				console.log( "origin: " + origin);
+				let uri= "http://" + hostname + ":" + port + "/doc";
+
+				// let txtarea= $("#docedit").value;
+				// let txtarea= $("#docedit").text;
+				// let txtarea= document.getElementById("docedit").value;
+				// console.log( "txtarea: " + txtarea);
+				// let postdata = JSON.parse(txtarea);
+				// let postdata= $("#docedit").text;
+				let postdata= document.getElementById("docedit").value;
+				console.log( "postdata: " + postdata);
+
+
+
+				// Access-Control-Allow-Origin: *
+				// $.post(uri, postdata, function(result, status){
+				// 	console.log("Data: " + data + "\\nStatus: " + status);
+				// }, dataType="json");
+
+				$.ajax({
+					type:"POST",
+					url:uri,
+					beforeSend: function(xhr){
+						xhr.setRequestHeader("Content-Type","application/json");
+						xhr.setRequestHeader("Accept","application/json");
+						xhr.setRequestHeader("Access-Control-Allow-Origin", origin);
+					},
+					data: postdata,
+					crossDomain: true,
+					dataType:"json"
+				});
+				// dataType:"jsonp"
+
+			}
+
+			function edit_doc(docid)
+			{
+				console.log( "show_doc: " + docid);
+				let hostname= document.getElementById("ipt_hostname").value;
+				let port= document.getElementById("ipt_port").value;
+
+				let uri= "http://" + hostname + ":" + port + "/doc/" + docid
+				$.ajax({url: uri, success: function(result){
+					console.log( "edit_doc: " + docid + "	ajax function");
+					let html = "";
+					html += "<button class='right' onclick='show_doc(\\""+docid+"\\")'>Cancel</button>";
+					html += "<button class='right' onclick='save_doc(\\""+docid+"\\")'>Save</button>";
+					html += "<textarea id='docedit' class='fill'></textarea>";
+					$("#workarea").html(html);
+					// $("#docedit").html(result);
+					let jsondata = JSON.parse(result);
+					$("#docedit").text(JSON.stringify(jsondata,null,'\t'));
+				}});
+			}
+
+			function show_doc(docid)
+			{
+				if (docid.length > 0){
+					console.log( "show_doc: " + docid);
+					let hostname= document.getElementById("ipt_hostname").value;
+					let port= document.getElementById("ipt_port").value;
+
+					let uri= "http://" + hostname + ":" + port + "/doc/" + docid;
+					$.ajax({url: uri, success: function(result){
+
+						console.log( "show_doc: " + docid + "	ajax function");
+						let html = "";
+						html += "<button class='right' onclick='edit_doc(\\""+docid+"\\")'>Edit</button>";
+						html += json_2_html(result);
+
+
+						$("#workarea").html(html);
+						$("#msgbar").html("Successfully loaded docid : " + docid);
+					}});
+				} else {
+					$("#workarea").html("");
+					$("#msgbar").html("Canceled New Document");
+				}
+
+			}
+
+			function load_doc()
+			{
+				console.log( "load_doc");
+
+				let docid= document.getElementById("docid").value;
+
+				show_doc(docid);
+			}
+
+			function load_index(){
+				console.log( "load_index");
+				let hostname= document.getElementById("ipt_hostname").value;
+				let port= document.getElementById("ipt_port").value;
+				let index= document.getElementById("indexes").value;
+
+				let uri= "http://" + hostname + ":" + port + "/index/" + index;
+				$.ajax({url: uri, success: function(result){
+					// let html = json_2_html(result);
+
+					let obj = JSON.parse(result);
+
+					let html = htmlindex(obj);
+
+					$("#list").html(html);
+					$("#msgbar").html("Successfully loaded index : " + index );
+				}});
+
+			}
+			function htmlindex(listdata)
+			{
+				let html = "<div>";
+
+				$.each(listdata, function( k, v ) {
+					console.log( "Key: " + k + ", Value: " + v );
+					html += "<div class='keyval' onclick='show_doc(\\""+k+"\\")' title='"+k+"'>";
+					html += "<span>"+v+"</span>";
+					html += "</div>";
+				});
+
+				html += "</div>";
+
+				return html;
+			}
+
+			function json_2_html(jsonstr)
+			{
+				let jsondata = JSON.parse(jsonstr);
+				let html = dict_2_html(jsondata);
+				return html;
+			}
+
+			function dict_2_html(dictdata)
+			{
+				let html = "<div>";
+
+				$.each(dictdata, function( k, v ) {
+					console.log( "Key: " + k + ", Value: " + v );
+
+					html += "<div class='keyval'>";
+					html += "</span>";
+					html += "<span class='key'>"+k+"</span>";
+
+					if (typeof v != 'object'){
+						html += "<span>"+v+"</span>";
+					} else {
+						let subhtml = dict_2_html(v)
+						html += "<span>"+subhtml+"</span>";
+					}
+
+					html += "</div>";
+				});
+
+
+				html += "</div>";
+
+				return html;
+			}
+
+		</script>
+
+		<style>
+
+			.fill {
+				height: 90%;
+				width: 100%;
+			}
+
+			.indent {
+				width: 10;
+			}
+
+			.keyval {
+				display: table-row-group;
+			}
+
+			.key::after {
+			  content: " : ";
+			}
+
+			div.keyval span {
+				padding-right: 10;
+				display: table-cell;
+			}
+			.body {
+			  height: 90%;
+			  width: 100%;
+			}
+
+			.infobar{
+				/* height: 5%; */
+				background-color: powderblue;
+			}
+
+			.left{
+				width: 20%;
+				height: 95%;
+				float: left;
+				overflow: auto;
+			}
+
+			.left > div {
+				width: max-content;
+			}
+
+			#workarea {
+				width: 80%;
+				height: 95%;
+				overflow: auto;
+			}
+
+			.right{
+				float: right;
+			}
+
+			.right > div {
+				padding-left: 10;
+			}
+
+			.hidden{
+				visibility: hidden;
+				display: none;
+			}
+
+
+		</style>
+
+
+		<title>MyNoSQL Admin</title>
+	</head>
+	<body>
+
+		<div id="connect">
+			<label for="ipt_hostname">Host Name / IP Address</label>
+			<input id="ipt_hostname" value="localhost">
+			<!-- <input id="ipt_hostname" value="ProfilesData"> -->
+			<label for="ipt_port">Port</label>
+			<input id="ipt_port" value="8800">
+			<button onclick="do_connect()" id="btn_connect" value="connect">Connect</button>
+		</div>
+
+		<div id="main" class="body hidden">
+			<div id="toolbar" class="infobar">
+				<table>
+					<tr>
+						<td>
+							<select id="sel_toolbar" onchange="switch_toolbar()">
+								<option value="doc">Document</option>
+								<option value="index">Index</option>
+								<option value="peer">Peer</option>
+							</select>
+						</td>
+
+						<td id="frm_doc" class="frm_tb">
+							<button onclick="new_doc()">New</button>
+							<input id="docid" value="" placeholder="Document ID" size="50">
+							<button onclick="load_doc()">Show</button>
+						</td>
+
+						<td id="frm_index" class="frm_tb hidden">
+							<button onclick="new_index()">New</button>
+							<select id="indexes" onchange="load_index()">
+								<option value="">None</option>
+							</select>
+							<!-- <button onclick="load_index()">Show</button> -->
+						</td>
+
+						<td id="frm_peer" class="frm_tb hidden">
+							<button onclick="show_peers()">Show Peers</button>
+							<input id="newpeerurl" value="" placeholder="New Peer URL" size="50">
+							<button onclick="add_peer()">Add Peer</button>
+						</td>
+					</tr>
+				</table>
+			</div>
+			<div id="list" class="left">
+			</div>
+			<div id="workarea" class="right">
+			</div>
+		</div>
+
+		<div id="emptymain" class="body">
+		</div>
+
+		<div id="">
+		</div>
+
+
+		<div id="msgbar" class="infobar">
+		</div>
+
+	</body>
+
+	</html>
+						"""
+					else:
+						# 404 not found
+						httpcode = 404
+						message = "Not Found"
+
 				if patharr[1].lower() == "peer":
 					db.debugmsg(5, "db:", db)
 					doc = db.getselfdoc()
@@ -207,6 +614,8 @@ class MyNoSQL:
 		self.doc_id = None
 		self.port = 0
 		self.dbopen = False
+		self.admingui = False
+
 		# self.dblocation = os.path.dirname(os.path.realpath(__file__))
 		self.dblocation = tempfile.gettempdir()
 		db = self
@@ -463,7 +872,14 @@ class MyNoSQL:
 				indexlocal = self.indexread(index)
 			if index == "rev":
 				# compare revisions
-				rdet = self._revdetail(indexremote[item])
+				try:
+					rdet = self._revdetail(indexremote[item])
+				except:
+					doc = self.readdoc(indexremote[item])
+					doc = self._updaterev(doc)
+					doc = self.savedoc(doc)
+					rdet = self._revdetail(indexremote[item])
+
 				self.debugmsg(8, "rdet:", rdet)
 				ldet = self._revdetail(indexlocal[item])
 				self.debugmsg(8, "ldet:", ldet)
@@ -745,6 +1161,8 @@ class MyNoSQL:
 	def _revdetail(self, rev):
 		detail = {}
 		detail["string"] = rev
+		if "." not in rev:
+			rev += ".0.0"
 		arev = rev.split(".")
 		detail["number"] = int(arev[0])
 
@@ -756,7 +1174,7 @@ class MyNoSQL:
 
 	def _checkrev(self, doc):
 		if "id" not in doc:
-			return True
+			return False
 		id = doc["id"]
 		if not self._docindexed(id):
 			return True
@@ -766,7 +1184,15 @@ class MyNoSQL:
 			return True
 		odoc = self.readdoc(id)
 		if doc["rev"] != odoc["rev"]:
-			cdet = self._revdetail(doc["rev"])
+
+			try:
+				cdet = self._revdetail(doc["rev"])
+			except:
+				doc = self._updaterev(doc)
+				doc = self.savedoc(doc)
+				cdet = self._revdetail(doc["rev"])
+
+			# cdet = self._revdetail(doc["rev"])
 			# self.debugmsg(5, "cdet:", cdet)
 			odet = self._revdetail(odoc["rev"])
 			# self.debugmsg(5, "odet:", odet)
@@ -940,6 +1366,8 @@ class MyNoSQL:
 				mirrorid = self._choosepeer()
 				peerdoc = self.readdoc(mirrorid)
 				rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + doc_id)
+				while rdoc is not None:
+					rdoc = self._getremote(peerdoc["dbserver"] + "/Doc/" + doc_id)
 				self.debugmsg(7, "rdoc:", rdoc)
 				self._saveremotedoc(rdoc)
 
