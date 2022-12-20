@@ -463,7 +463,14 @@ class MyNoSQL:
 				indexlocal = self.indexread(index)
 			if index == "rev":
 				# compare revisions
-				rdet = self._revdetail(indexremote[item])
+				try:
+					rdet = self._revdetail(indexremote[item])
+				except:
+					doc = self.readdoc(indexremote[item])
+					doc = self._updaterev(doc)
+					doc = self.savedoc(doc)
+					rdet = self._revdetail(indexremote[item])
+
 				self.debugmsg(8, "rdet:", rdet)
 				ldet = self._revdetail(indexlocal[item])
 				self.debugmsg(8, "ldet:", ldet)
@@ -745,7 +752,8 @@ class MyNoSQL:
 	def _revdetail(self, rev):
 		detail = {}
 		detail["string"] = rev
-		arev = rev.split(".")
+		if "." not in rev:
+			rev += ".0.0"		arev = rev.split(".")
 		detail["number"] = int(arev[0])
 
 		# hex_val = 'beef101'
