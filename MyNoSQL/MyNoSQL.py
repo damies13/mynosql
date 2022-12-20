@@ -753,7 +753,8 @@ class MyNoSQL:
 		detail = {}
 		detail["string"] = rev
 		if "." not in rev:
-			rev += ".0.0"		arev = rev.split(".")
+			rev += ".0.0"
+		arev = rev.split(".")
 		detail["number"] = int(arev[0])
 
 		# hex_val = 'beef101'
